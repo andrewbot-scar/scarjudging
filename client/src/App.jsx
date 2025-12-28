@@ -662,9 +662,9 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
     return activeMatch?.id || scorableMatches[0]?.id || null;
   });
   
-  // Find the selected match, or fall back to first scorable match
+  // Find the selected match - convert IDs to strings for comparison since select returns strings
   const selectedMatch = selectedMatchId 
-    ? scorableMatches.find(m => m.id === selectedMatchId) || scorableMatches[0]
+    ? scorableMatches.find(m => String(m.id) === String(selectedMatchId)) || scorableMatches[0]
     : scorableMatches[0];
   
   const [scores, setScores] = useState({ aggression: 2, damage: 3, control: 1 });
@@ -680,6 +680,7 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
 
   // Reset form when match changes
   const handleMatchChange = (matchId) => {
+    // matchId comes as string from select element
     setSelectedMatchId(matchId);
     setScores({ aggression: 2, damage: 3, control: 1 });
     setIsKO(false);
