@@ -3,11 +3,18 @@ import React, { useState, useEffect, useCallback } from 'react';
 // API Configuration
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
+// Local Storage Keys
+const STORAGE_KEYS = {
+  EVENT_NAME: 'scar_event_name',
+  TOURNAMENTS: 'scar_tournaments',
+  DARK_MODE: 'scar_dark_mode',
+};
+
 // API Service
 const api = {
   async getTournament(tournamentId) {
     const response = await fetch(`${API_BASE_URL}/tournaments/${tournamentId}`);
-    if (!response.ok) throw new Error('Failed to fetch tournament');
+    if (!response.ok) throw new Error(`Failed to fetch tournament: ${tournamentId}`);
     return response.json();
   },
 
@@ -101,7 +108,7 @@ const themes = {
 };
 
 // Helper to transform Challonge data to our format
-function transformChallongeData(challongeData) {
+function transformChallongeData(challongeData, tournamentUrl) {
   const tournament = challongeData.tournament;
   const participants = tournament.participants || [];
   const matches = tournament.matches || [];
@@ -152,20 +159,21 @@ function transformChallongeData(challongeData) {
       scores: match.scores_csv ? parseScores(match.scores_csv) : { a: 0, b: 0 },
       sourceA: sourceA,
       sourceB: sourceB,
+      // Add tournament context for multi-tournament support
+      tournamentName: tournament.name,
+      tournamentUrl: tournamentUrl || tournament.url,
+      tournamentId: tournament.id,
     };
   });
 
-  // Filter out bracket reset matches (matches with no players that come after Grand Finals)
-  // In double elimination, the bracket reset only happens if the losers bracket winner beats the winners bracket winner
+  // Filter out bracket reset matches
   const maxMatchNum = Math.max(...transformedMatches.map(m => m.matchNum));
   const grandFinalsMatch = transformedMatches.find(m => 
     m.bracket === 'winners' && 
     m.round === Math.max(...transformedMatches.filter(x => x.bracket === 'winners').map(x => x.round))
   );
   
-  // Filter out potential bracket reset match (highest match number with no competitors assigned)
   const filteredMatches = transformedMatches.filter(m => {
-    // If this is the highest numbered match, has no competitors, and comes after grand finals, hide it
     if (m.matchNum === maxMatchNum && !m.competitorA && !m.competitorB && grandFinalsMatch && m.matchNum > grandFinalsMatch.matchNum) {
       return false;
     }
@@ -176,7 +184,7 @@ function transformChallongeData(challongeData) {
     tournament: {
       id: tournament.id,
       name: tournament.name,
-      url: tournament.url,
+      url: tournamentUrl || tournament.url,
       status: tournament.state,
     },
     participants: participants.map(p => ({
@@ -211,7 +219,7 @@ const StatusBadge = ({ status, winMethod, theme }) => {
 };
 
 // Match Detail Popup Component
-const MatchDetailPopup = ({ match, tournamentId, onClose, theme }) => {
+const MatchDetailPopup = ({ match, onClose, theme }) => {
   const t = themes[theme];
   const [judgeScores, setJudgeScores] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -225,13 +233,12 @@ const MatchDetailPopup = ({ match, tournamentId, onClose, theme }) => {
       setError(null);
       
       try {
-        const url = `${process.env.REACT_APP_API_URL || 'http://localhost:3001/api'}/matches/${match.challongeId}/scores/details?tournamentId=${tournamentId || ''}`;
+        const url = `${API_BASE_URL}/matches/${match.challongeId}/scores/details?tournamentId=${match.tournamentUrl || ''}`;
         const response = await fetch(url);
         if (response.ok) {
           const data = await response.json();
           setJudgeScores(data);
         } else {
-          // No scores yet or endpoint doesn't exist
           setJudgeScores({ judges: {} });
         }
       } catch (err) {
@@ -243,14 +250,13 @@ const MatchDetailPopup = ({ match, tournamentId, onClose, theme }) => {
     };
 
     fetchScores();
-  }, [match, tournamentId]);
+  }, [match]);
 
   if (!match) return null;
 
   const judges = judgeScores?.judges ? Object.entries(judgeScores.judges) : [];
   const hasScores = judges.length > 0;
 
-  // Calculate totals for each judge
   const getJudgeTotals = (scores) => {
     if (!scores) return { a: 0, b: 0 };
     const totalA = (scores.aggression || 0) + (scores.damage || 0) + (scores.control || 0);
@@ -260,17 +266,14 @@ const MatchDetailPopup = ({ match, tournamentId, onClose, theme }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       
-      {/* Modal */}
       <div className={`relative w-full max-w-lg ${t.card} rounded-2xl border ${t.cardBorder} shadow-2xl overflow-hidden`}>
-        {/* Header */}
         <div className={`px-5 py-4 border-b ${t.divider} flex justify-between items-center`}>
           <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`text-xs px-2 py-0.5 rounded ${t.tableBg} ${t.textMuted}`}>{match.tournamentName}</span>
+            </div>
             <span className={`text-xs ${t.textFaint} font-mono`}>Match {match.matchNum}</span>
             <div className="flex items-center gap-2 mt-1">
               <StatusBadge status={match.status} winMethod={match.winMethod} theme={theme} />
@@ -279,17 +282,13 @@ const MatchDetailPopup = ({ match, tournamentId, onClose, theme }) => {
               )}
             </div>
           </div>
-          <button 
-            onClick={onClose}
-            className={`p-2 rounded-lg ${t.hoverBg} ${t.textMuted} transition-colors`}
-          >
+          <button onClick={onClose} className={`p-2 rounded-lg ${t.hoverBg} ${t.textMuted} transition-colors`}>
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        {/* Competitors */}
         <div className={`px-5 py-4 border-b ${t.divider}`}>
           <div className="grid grid-cols-3 items-center gap-4">
             <div className="text-center">
@@ -316,24 +315,17 @@ const MatchDetailPopup = ({ match, tournamentId, onClose, theme }) => {
           </div>
         </div>
 
-        {/* Judge Scores */}
         <div className="px-5 py-4 max-h-80 overflow-y-auto">
           <h3 className={`text-sm font-semibold ${t.textFaint} uppercase tracking-wide mb-4`}>
             Judge Scores ({judges.length}/3)
           </h3>
 
           {isLoading ? (
-            <div className="text-center py-8">
-              <p className={t.textMuted}>Loading scores...</p>
-            </div>
+            <div className="text-center py-8"><p className={t.textMuted}>Loading scores...</p></div>
           ) : error ? (
-            <div className="text-center py-8">
-              <p className="text-red-500">{error}</p>
-            </div>
+            <div className="text-center py-8"><p className="text-red-500">{error}</p></div>
           ) : !hasScores ? (
-            <div className="text-center py-8">
-              <p className={t.textMuted}>No judge scores submitted yet</p>
-            </div>
+            <div className="text-center py-8"><p className={t.textMuted}>No judge scores submitted yet</p></div>
           ) : (
             <div className="space-y-4">
               {judges.map(([judgeId, judgeData], index) => {
@@ -347,58 +339,28 @@ const MatchDetailPopup = ({ match, tournamentId, onClose, theme }) => {
                           KO: {judgeData.koWinnerId === match.competitorAId ? match.competitorA : match.competitorB}
                         </span>
                       ) : (
-                        <span className={`text-sm ${t.textMuted}`}>
-                          {totals.a} - {totals.b}
-                        </span>
+                        <span className={`text-sm ${t.textMuted}`}>{totals.a} - {totals.b}</span>
                       )}
                     </div>
                     
                     {!judgeData.isKO && judgeData.scores && (
                       <div className="space-y-2">
-                        {/* Aggression */}
-                        <div className="flex items-center justify-between text-sm">
-                          <span className={t.textMuted}>Aggression</span>
-                          <div className="flex items-center gap-2">
-                            <span className={`font-mono ${t.blueText}`}>{judgeData.scores.aggression}</span>
-                            <div className={`w-16 h-1.5 ${t.sliderBg} rounded-full overflow-hidden`}>
-                              <div 
-                                className="h-full bg-blue-500" 
-                                style={{ width: `${(judgeData.scores.aggression / 3) * 100}%` }}
-                              />
+                        {['aggression', 'damage', 'control'].map(cat => {
+                          const max = cat === 'damage' ? 5 : 3;
+                          const val = judgeData.scores[cat];
+                          return (
+                            <div key={cat} className="flex items-center justify-between text-sm">
+                              <span className={`${t.textMuted} capitalize`}>{cat}</span>
+                              <div className="flex items-center gap-2">
+                                <span className={`font-mono ${t.blueText}`}>{val}</span>
+                                <div className={`w-16 h-1.5 ${t.sliderBg} rounded-full overflow-hidden`}>
+                                  <div className="h-full bg-blue-500" style={{ width: `${(val / max) * 100}%` }} />
+                                </div>
+                                <span className={`font-mono ${t.redText}`}>{max - val}</span>
+                              </div>
                             </div>
-                            <span className={`font-mono ${t.redText}`}>{3 - judgeData.scores.aggression}</span>
-                          </div>
-                        </div>
-                        
-                        {/* Damage */}
-                        <div className="flex items-center justify-between text-sm">
-                          <span className={t.textMuted}>Damage</span>
-                          <div className="flex items-center gap-2">
-                            <span className={`font-mono ${t.blueText}`}>{judgeData.scores.damage}</span>
-                            <div className={`w-16 h-1.5 ${t.sliderBg} rounded-full overflow-hidden`}>
-                              <div 
-                                className="h-full bg-blue-500" 
-                                style={{ width: `${(judgeData.scores.damage / 5) * 100}%` }}
-                              />
-                            </div>
-                            <span className={`font-mono ${t.redText}`}>{5 - judgeData.scores.damage}</span>
-                          </div>
-                        </div>
-                        
-                        {/* Control */}
-                        <div className="flex items-center justify-between text-sm">
-                          <span className={t.textMuted}>Control</span>
-                          <div className="flex items-center gap-2">
-                            <span className={`font-mono ${t.blueText}`}>{judgeData.scores.control}</span>
-                            <div className={`w-16 h-1.5 ${t.sliderBg} rounded-full overflow-hidden`}>
-                              <div 
-                                className="h-full bg-blue-500" 
-                                style={{ width: `${(judgeData.scores.control / 3) * 100}%` }}
-                              />
-                            </div>
-                            <span className={`font-mono ${t.redText}`}>{3 - judgeData.scores.control}</span>
-                          </div>
-                        </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -408,12 +370,8 @@ const MatchDetailPopup = ({ match, tournamentId, onClose, theme }) => {
           )}
         </div>
 
-        {/* Footer */}
         <div className={`px-5 py-3 border-t ${t.divider} ${t.tableBg}`}>
-          <button
-            onClick={onClose}
-            className={`w-full py-2 rounded-lg border ${t.cardBorder} ${t.text} font-semibold ${t.hoverBg} transition-colors`}
-          >
+          <button onClick={onClose} className={`w-full py-2 rounded-lg border ${t.cardBorder} ${t.text} font-semibold ${t.hoverBg} transition-colors`}>
             Close
           </button>
         </div>
@@ -423,7 +381,7 @@ const MatchDetailPopup = ({ match, tournamentId, onClose, theme }) => {
 };
 
 // Helper to get placeholder text for undetermined competitors
-const getCompetitorDisplay = (competitor, source, theme) => {
+const getCompetitorDisplay = (competitor, source) => {
   if (competitor) return { text: competitor, isPlaceholder: false };
   if (!source) return { text: 'TBD', isPlaceholder: true };
   
@@ -446,23 +404,15 @@ const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) =>
       
       <div className="flex items-center gap-4">
         <div className="w-12 text-center">
-          <span className={`text-2xl font-bold ${valueA > valueB ? t.blueText : t.textFaint}`}>
-            {valueA}
-          </span>
+          <span className={`text-2xl font-bold ${valueA > valueB ? t.blueText : t.textFaint}`}>{valueA}</span>
         </div>
         
         <div className="flex-1 relative">
           <div className={`h-2 ${t.sliderBg} rounded-full overflow-hidden`}>
-            <div 
-              className={`h-full ${t.sliderFill} transition-all duration-150`}
-              style={{ width: `${percentage}%` }}
-            />
+            <div className={`h-full ${t.sliderFill} transition-all duration-150`} style={{ width: `${percentage}%` }} />
           </div>
           <input
-            type="range"
-            min={0}
-            max={maxPoints}
-            value={valueA}
+            type="range" min={0} max={maxPoints} value={valueA}
             onChange={(e) => onChange(parseInt(e.target.value))}
             disabled={disabled}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
@@ -475,22 +425,20 @@ const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) =>
         </div>
         
         <div className="w-12 text-center">
-          <span className={`text-2xl font-bold ${valueB > valueA ? t.redText : t.textFaint}`}>
-            {valueB}
-          </span>
+          <span className={`text-2xl font-bold ${valueB > valueA ? t.redText : t.textFaint}`}>{valueB}</span>
         </div>
       </div>
     </div>
   );
 };
 
-// Match Card Component
-const MatchCard = ({ match, onClick, theme }) => {
+// Match Card Component (updated with tournament name)
+const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
   const t = themes[theme];
   const isActive = match.status === 'active';
   
-  const compA = getCompetitorDisplay(match.competitorA, match.sourceA, theme);
-  const compB = getCompetitorDisplay(match.competitorB, match.sourceB, theme);
+  const compA = getCompetitorDisplay(match.competitorA, match.sourceA);
+  const compB = getCompetitorDisplay(match.competitorB, match.sourceB);
   
   return (
     <div 
@@ -503,7 +451,14 @@ const MatchCard = ({ match, onClick, theme }) => {
     >
       <div className="p-3">
         <div className="flex justify-between items-center mb-2">
-          <span className={`text-xs ${t.textFaint} font-mono`}>Match {match.matchNum || match.id}</span>
+          <div className="flex items-center gap-2">
+            {showTournament && (
+              <span className={`text-xs px-1.5 py-0.5 rounded ${t.tableBg} ${t.textFaint} truncate max-w-[120px]`}>
+                {match.tournamentName}
+              </span>
+            )}
+            <span className={`text-xs ${t.textFaint} font-mono`}>M{match.matchNum}</span>
+          </div>
           <StatusBadge status={match.status} winMethod={match.winMethod} theme={theme} />
         </div>
         
@@ -512,11 +467,9 @@ const MatchCard = ({ match, onClick, theme }) => {
             match.winner === match.competitorA && match.competitorA ? t.winnerBg : t.tableBg
           }`}>
             <span className={`text-sm ${
-              compA.isPlaceholder 
-                ? `${t.textFaint} italic` 
-                : match.winner === match.competitorA 
-                  ? `font-semibold ${t.winnerText}` 
-                  : `font-semibold ${t.text}`
+              compA.isPlaceholder ? `${t.textFaint} italic` 
+                : match.winner === match.competitorA ? `font-semibold ${t.winnerText}` 
+                : `font-semibold ${t.text}`
             }`}>
               {compA.text}
               {match.winner === match.competitorA && match.competitorA && ' ✓'}
@@ -530,11 +483,9 @@ const MatchCard = ({ match, onClick, theme }) => {
             match.winner === match.competitorB && match.competitorB ? t.winnerBg : t.tableBg
           }`}>
             <span className={`text-sm ${
-              compB.isPlaceholder 
-                ? `${t.textFaint} italic` 
-                : match.winner === match.competitorB 
-                  ? `font-semibold ${t.winnerText}` 
-                  : `font-semibold ${t.text}`
+              compB.isPlaceholder ? `${t.textFaint} italic` 
+                : match.winner === match.competitorB ? `font-semibold ${t.winnerText}` 
+                : `font-semibold ${t.text}`
             }`}>
               {compB.text}
               {match.winner === match.competitorB && match.competitorB && ' ✓'}
@@ -544,33 +495,31 @@ const MatchCard = ({ match, onClick, theme }) => {
             )}
           </div>
         </div>
-        
-        {isActive && (
-          <div className={`mt-3 pt-2 border-t ${t.divider}`}>
-            <div className="flex items-center justify-between">
-              <span className={`text-xs ${t.textFaint}`}>Judges submitted</span>
-              <div className="flex gap-1">
-                {[0, 1, 2].map(i => (
-                  <div key={i} className={`w-2.5 h-2.5 rounded-full ${t.tickMark}`} />
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
 };
 
-// Public Bracket View
-const PublicBracketView = ({ matches, onMatchClick, theme }) => {
+// Public Bracket View (updated for multi-tournament)
+const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
   const t = themes[theme];
+  const [selectedTournamentIndex, setSelectedTournamentIndex] = useState(0);
   
-  // Group matches by bracket and round
+  if (!tournaments || tournaments.length === 0) {
+    return (
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-8 text-center`}>
+        <h3 className={`text-lg font-bold ${t.text} mb-2`}>No Tournaments Connected</h3>
+        <p className={t.textMuted}>Go to Admin → Settings to add tournament URLs</p>
+      </div>
+    );
+  }
+
+  const currentTournament = tournaments[selectedTournamentIndex];
+  const matches = currentTournament?.matches || [];
+  
   const winnersMatches = matches.filter(m => m.bracket === 'winners');
   const losersMatches = matches.filter(m => m.bracket === 'losers');
   
-  // Get unique rounds
   const winnersRounds = [...new Set(winnersMatches.map(m => m.round))].sort((a, b) => a - b);
   const losersRounds = [...new Set(losersMatches.map(m => m.round))].sort((a, b) => a - b);
   
@@ -589,11 +538,33 @@ const PublicBracketView = ({ matches, onMatchClick, theme }) => {
   
   return (
     <div className="space-y-6">
+      {/* Tournament Selector Tabs */}
+      {tournaments.length > 1 && (
+        <div className={`${t.card} rounded-xl border ${t.cardBorder} p-2`}>
+          <div className="flex gap-2 overflow-x-auto">
+            {tournaments.map((tourney, index) => (
+              <button
+                key={tourney.tournament.id}
+                onClick={() => setSelectedTournamentIndex(index)}
+                className={`px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors ${
+                  selectedTournamentIndex === index 
+                    ? 'bg-blue-600 text-white' 
+                    : `${t.textMuted} ${t.hoverBg}`
+                }`}
+              >
+                {tourney.tournament.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Winners Bracket */}
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5`}>
         <h2 className={`text-lg font-bold ${t.text} mb-4 flex items-center gap-2`}>
           <span className="w-3 h-3 rounded-full bg-green-500"></span>
           Winners Bracket
+          <span className={`text-sm font-normal ${t.textMuted}`}>- {currentTournament?.tournament.name}</span>
         </h2>
         <div className="flex gap-6 overflow-x-auto pb-2">
           {winnersRounds.map(round => {
@@ -644,28 +615,39 @@ const PublicBracketView = ({ matches, onMatchClick, theme }) => {
   );
 };
 
-// Judge Scoring View with API Integration
-const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted, theme }) => {
+// Judge Scoring View - UNIFIED across all tournaments
+const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme }) => {
   const t = themes[theme];
   
-  // Get matches that can be scored (active or pending with both competitors assigned, and not completed)
-  const scorableMatches = matches.filter(m => 
-    (m.status === 'active' || m.status === 'pending') && 
-    m.competitorA && 
-    m.competitorB &&
-    m.status !== 'completed'
+  // Combine all scorable matches from all tournaments
+  const allScorableMatches = tournaments.flatMap(tourney => 
+    (tourney.matches || []).filter(m => 
+      (m.status === 'active' || m.status === 'pending') && 
+      m.competitorA && 
+      m.competitorB &&
+      m.status !== 'completed'
+    )
   );
-  
-  // State for selected match - initialize to first available match
-  const [selectedMatchId, setSelectedMatchId] = useState(() => {
-    const activeMatch = scorableMatches.find(m => m.status === 'active');
-    return activeMatch?.id || scorableMatches[0]?.id || null;
+
+  // Sort: active matches first, then by tournament name, then by match number
+  const sortedMatches = [...allScorableMatches].sort((a, b) => {
+    if (a.status === 'active' && b.status !== 'active') return -1;
+    if (b.status === 'active' && a.status !== 'active') return 1;
+    if (a.tournamentName !== b.tournamentName) return a.tournamentName.localeCompare(b.tournamentName);
+    return a.matchNum - b.matchNum;
+  });
+
+  // State for selected match
+  const [selectedMatchKey, setSelectedMatchKey] = useState(() => {
+    const activeMatch = sortedMatches.find(m => m.status === 'active');
+    const firstMatch = activeMatch || sortedMatches[0];
+    return firstMatch ? `${firstMatch.tournamentUrl}-${firstMatch.id}` : null;
   });
   
-  // Find the selected match - convert IDs to strings for comparison since select returns strings
-  const selectedMatch = selectedMatchId 
-    ? scorableMatches.find(m => String(m.id) === String(selectedMatchId)) || scorableMatches[0]
-    : scorableMatches[0];
+  // Find the selected match
+  const selectedMatch = selectedMatchKey 
+    ? sortedMatches.find(m => `${m.tournamentUrl}-${m.id}` === selectedMatchKey) || sortedMatches[0]
+    : sortedMatches[0];
   
   const [scores, setScores] = useState({ aggression: 2, damage: 3, control: 1 });
   const [isKO, setIsKO] = useState(false);
@@ -679,9 +661,8 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
   const totalB = 11 - totalA;
 
   // Reset form when match changes
-  const handleMatchChange = (matchId) => {
-    // matchId comes as string from select element
-    setSelectedMatchId(matchId);
+  const handleMatchChange = (matchKey) => {
+    setSelectedMatchKey(matchKey);
     setScores({ aggression: 2, damage: 3, control: 1 });
     setIsKO(false);
     setKoWinner(null);
@@ -699,7 +680,7 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
     try {
       const scoreData = {
         judgeId: currentUser.id,
-        tournamentId: tournamentId,
+        tournamentId: selectedMatch.tournamentUrl,
         competitorAId: selectedMatch.competitorAId,
         competitorBId: selectedMatch.competitorBId,
         scores: isKO ? null : scores,
@@ -712,7 +693,6 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
       setHasSubmitted(true);
 
       if (result.finalized) {
-        // Match was finalized, trigger refresh
         onScoreSubmitted && onScoreSubmitted(result);
       }
     } catch (err) {
@@ -734,7 +714,7 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
     }
   };
   
-  if (scorableMatches.length === 0) {
+  if (sortedMatches.length === 0) {
     return (
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-8 text-center`}>
         <div className={`w-16 h-16 mx-auto rounded-full ${t.tableBg} flex items-center justify-center mb-4`}>
@@ -743,7 +723,7 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
           </svg>
         </div>
         <h3 className={`text-lg font-bold ${t.text} mb-2`}>No Matches Available</h3>
-        <p className={t.textMuted}>No matches are ready for scoring yet.</p>
+        <p className={t.textMuted}>No matches are ready for scoring across any tournament.</p>
       </div>
     );
   }
@@ -752,26 +732,39 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
     return (
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-8 text-center`}>
         <h3 className={`text-lg font-bold ${t.text} mb-2`}>Select a Match</h3>
-        <p className={t.textMuted}>Choose a match from the dropdown above to begin scoring.</p>
+        <p className={t.textMuted}>Choose a match from the dropdown to begin scoring.</p>
       </div>
     );
   }
   
+  // Group matches by tournament for the dropdown
+  const matchesByTournament = sortedMatches.reduce((acc, match) => {
+    if (!acc[match.tournamentName]) acc[match.tournamentName] = [];
+    acc[match.tournamentName].push(match);
+    return acc;
+  }, {});
+
   return (
     <div className="max-w-xl mx-auto space-y-4">
-      {/* Match Selector */}
+      {/* Match Selector - grouped by tournament */}
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-4`}>
-        <label className={`block text-sm font-medium ${t.textMuted} mb-2`}>Select Match to Score</label>
+        <label className={`block text-sm font-medium ${t.textMuted} mb-2`}>
+          Select Match to Score ({sortedMatches.length} available)
+        </label>
         <select
-          value={selectedMatch?.id || ''}
+          value={selectedMatchKey || ''}
           onChange={(e) => handleMatchChange(e.target.value)}
           className={`w-full px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
         >
-          {scorableMatches.map(match => (
-            <option key={match.id} value={match.id}>
-              Match {match.matchNum}: {match.competitorA} vs {match.competitorB}
-              {match.status === 'active' ? ' (Live)' : ''}
-            </option>
+          {Object.entries(matchesByTournament).map(([tournamentName, matches]) => (
+            <optgroup key={tournamentName} label={tournamentName}>
+              {matches.map(match => (
+                <option key={`${match.tournamentUrl}-${match.id}`} value={`${match.tournamentUrl}-${match.id}`}>
+                  {match.status === 'active' ? '🔴 ' : ''}
+                  M{match.matchNum}: {match.competitorA} vs {match.competitorB}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </select>
       </div>
@@ -798,7 +791,10 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5`}>
         <div className="flex justify-between items-start mb-4">
           <div>
-            <span className={`text-xs ${t.textFaint} font-mono`}>Match {selectedMatch.matchNum}</span>
+            <span className={`text-xs px-2 py-0.5 rounded ${t.tableBg} ${t.textMuted} mb-1 inline-block`}>
+              {selectedMatch.tournamentName}
+            </span>
+            <div className={`text-xs ${t.textFaint} font-mono mt-1`}>Match {selectedMatch.matchNum}</div>
             <div className="mt-1">
               <StatusBadge status={selectedMatch.status} theme={theme} />
             </div>
@@ -920,34 +916,55 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
   );
 };
 
-// Admin Dashboard View
-const AdminDashboardView = ({ tournament, onRefresh, theme }) => {
+// Admin Dashboard View - UPDATED for multi-tournament events
+const AdminDashboardView = ({ eventName, tournamentUrls, tournaments, onEventNameChange, onAddTournament, onRemoveTournament, onRefreshAll, theme }) => {
   const t = themes[theme];
   const [selectedTab, setSelectedTab] = useState('settings');
-  const [challongeUrl, setChallongeUrl] = useState('');
+  const [newTournamentUrl, setNewTournamentUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
+  const [localEventName, setLocalEventName] = useState(eventName);
   
-  const handleSync = async () => {
-    if (!challongeUrl) return;
+  const handleAddTournament = async () => {
+    if (!newTournamentUrl.trim()) return;
     setIsLoading(true);
     setSyncStatus(null);
     
     try {
-      await onRefresh(challongeUrl);
-      setSyncStatus({ success: true, message: 'Tournament synced successfully!' });
+      await onAddTournament(newTournamentUrl.trim());
+      setNewTournamentUrl('');
+      setSyncStatus({ success: true, message: 'Tournament added successfully!' });
     } catch (err) {
       setSyncStatus({ success: false, message: err.message });
     } finally {
       setIsLoading(false);
     }
   };
+
+  const handleRefreshAll = async () => {
+    setIsLoading(true);
+    setSyncStatus(null);
+    
+    try {
+      await onRefreshAll();
+      setSyncStatus({ success: true, message: 'All tournaments refreshed!' });
+    } catch (err) {
+      setSyncStatus({ success: false, message: err.message });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEventNameSave = () => {
+    onEventNameChange(localEventName);
+    setSyncStatus({ success: true, message: 'Event name saved!' });
+  };
   
   return (
     <div className="space-y-4">
       {/* Tab Navigation */}
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-1 inline-flex gap-1`}>
-        {['settings', 'judges'].map(tab => (
+        {['settings', 'tournaments', 'judges'].map(tab => (
           <button key={tab} onClick={() => setSelectedTab(tab)}
             className={`px-4 py-2 rounded-lg text-sm font-semibold capitalize transition-colors ${
               selectedTab === tab ? 'bg-gray-900 text-white' : `${t.textMuted} hover:${t.text}`
@@ -956,50 +973,39 @@ const AdminDashboardView = ({ tournament, onRefresh, theme }) => {
           </button>
         ))}
       </div>
+
+      {/* Status Message */}
+      {syncStatus && (
+        <div className={`p-4 rounded-lg ${syncStatus.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+          <p className={syncStatus.success ? 'text-green-700' : 'text-red-700'}>{syncStatus.message}</p>
+        </div>
+      )}
       
       {selectedTab === 'settings' && (
         <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5 space-y-5`}>
-          <h3 className={`font-bold ${t.text}`}>Challonge Integration</h3>
-          
-          {syncStatus && (
-            <div className={`p-4 rounded-lg ${syncStatus.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
-              <p className={syncStatus.success ? 'text-green-700' : 'text-red-700'}>{syncStatus.message}</p>
-            </div>
-          )}
+          <h3 className={`font-bold ${t.text}`}>Event Configuration</h3>
           
           <div>
-            <label className={`block text-sm font-medium ${t.textMuted} mb-1`}>Challonge Tournament URL</label>
+            <label className={`block text-sm font-medium ${t.textMuted} mb-1`}>Event Name</label>
             <div className="flex gap-2">
               <input 
                 type="text" 
-                value={challongeUrl}
-                onChange={(e) => setChallongeUrl(e.target.value)}
-                placeholder="e.g., scar-summer-showdown-2024"
+                value={localEventName}
+                onChange={(e) => setLocalEventName(e.target.value)}
+                placeholder="e.g., Texas Cup 2025"
                 className={`flex-1 px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`} 
               />
               <button 
-                onClick={handleSync}
-                disabled={isLoading || !challongeUrl}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+                onClick={handleEventNameSave}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
               >
-                {isLoading ? 'Syncing...' : 'Sync'}
+                Save
               </button>
             </div>
             <p className={`text-xs ${t.textFaint} mt-1`}>
-              Enter the tournament URL slug from challonge.com/YOUR_URL_HERE
+              This name will display in the header
             </p>
           </div>
-
-          {tournament && (
-            <div className={`pt-4 border-t ${t.divider}`}>
-              <p className={`text-sm font-medium ${t.textMuted} mb-2`}>Connected Tournament</p>
-              <div className={`${t.tableBg} rounded-lg p-4`}>
-                <p className={`font-bold ${t.text}`}>{tournament.name}</p>
-                <p className={`text-sm ${t.textMuted}`}>Status: {tournament.status}</p>
-                <p className={`text-xs ${t.textFaint}`}>ID: {tournament.id}</p>
-              </div>
-            </div>
-          )}
           
           <div className={`pt-4 border-t ${t.divider}`}>
             <p className={`text-sm font-medium ${t.textMuted} mb-3`}>Scoring Criteria (Fixed)</p>
@@ -1013,6 +1019,85 @@ const AdminDashboardView = ({ tournament, onRefresh, theme }) => {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {selectedTab === 'tournaments' && (
+        <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5 space-y-5`}>
+          <div className="flex justify-between items-center">
+            <h3 className={`font-bold ${t.text}`}>Tournament URLs ({tournamentUrls.length})</h3>
+            {tournamentUrls.length > 0 && (
+              <button 
+                onClick={handleRefreshAll}
+                disabled={isLoading}
+                className={`px-3 py-1.5 text-sm font-semibold ${t.textMuted} ${t.hoverBg} rounded-lg transition-colors disabled:opacity-50`}
+              >
+                {isLoading ? 'Refreshing...' : '↻ Refresh All'}
+              </button>
+            )}
+          </div>
+          
+          {/* Add Tournament */}
+          <div>
+            <label className={`block text-sm font-medium ${t.textMuted} mb-1`}>Add Tournament</label>
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                value={newTournamentUrl}
+                onChange={(e) => setNewTournamentUrl(e.target.value)}
+                placeholder="e.g., TexasCup25-1lb-antweight"
+                className={`flex-1 px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`} 
+              />
+              <button 
+                onClick={handleAddTournament}
+                disabled={isLoading || !newTournamentUrl.trim()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                {isLoading ? 'Adding...' : 'Add'}
+              </button>
+            </div>
+            <p className={`text-xs ${t.textFaint} mt-1`}>
+              Enter the tournament URL slug from challonge.com/YOUR_URL_HERE
+            </p>
+          </div>
+
+          {/* Tournament List */}
+          {tournamentUrls.length > 0 ? (
+            <div className="space-y-2">
+              {tournamentUrls.map((url, index) => {
+                const tourneyData = tournaments.find(t => t.tournament.url === url);
+                return (
+                  <div key={url} className={`${t.tableBg} rounded-lg p-4 flex justify-between items-center`}>
+                    <div>
+                      <p className={`font-semibold ${t.text}`}>
+                        {tourneyData?.tournament.name || url}
+                      </p>
+                      <p className={`text-xs ${t.textFaint}`}>{url}</p>
+                      {tourneyData && (
+                        <p className={`text-xs ${t.textMuted} mt-1`}>
+                          Status: {tourneyData.tournament.status} • {tourneyData.matches?.length || 0} matches
+                        </p>
+                      )}
+                    </div>
+                    <button 
+                      onClick={() => onRemoveTournament(url)}
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Remove tournament"
+                    >
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className={`${t.tableBg} rounded-lg p-8 text-center`}>
+              <p className={t.textMuted}>No tournaments added yet</p>
+              <p className={`text-xs ${t.textFaint} mt-1`}>Add tournament URLs above to get started</p>
+            </div>
+          )}
         </div>
       )}
       
@@ -1031,70 +1116,131 @@ export default function TournamentJudgingApp() {
   const [view, setView] = useState('public');
   const [selectedMatch, setSelectedMatch] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
-  const [darkMode, setDarkMode] = useState(true);
-  const [tournamentData, setTournamentData] = useState(null);
+  const [showJudgeSelect, setShowJudgeSelect] = useState(false);
+  
+  // Load dark mode from localStorage
+  const [darkMode, setDarkMode] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.DARK_MODE);
+    return saved !== null ? JSON.parse(saved) : true;
+  });
+
+  // Load event data from localStorage
+  const [eventName, setEventName] = useState(() => {
+    return localStorage.getItem(STORAGE_KEYS.EVENT_NAME) || '';
+  });
+  
+  const [tournamentUrls, setTournamentUrls] = useState(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.TOURNAMENTS);
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Tournament data state
+  const [tournaments, setTournaments] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   
   const theme = darkMode ? 'dark' : 'light';
   const t = themes[theme];
 
-  const loadTournament = useCallback(async (tournamentUrl) => {
+  // Save dark mode to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.DARK_MODE, JSON.stringify(darkMode));
+  }, [darkMode]);
+
+  // Save event name to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.EVENT_NAME, eventName);
+  }, [eventName]);
+
+  // Save tournament URLs to localStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.TOURNAMENTS, JSON.stringify(tournamentUrls));
+  }, [tournamentUrls]);
+
+  // Load all tournaments on mount and when URLs change
+  const loadAllTournaments = useCallback(async () => {
+    if (tournamentUrls.length === 0) {
+      setTournaments([]);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
-    
+
     try {
-      const data = await api.getTournament(tournamentUrl);
-      const transformed = transformChallongeData(data);
-      setTournamentData(transformed);
+      const results = await Promise.all(
+        tournamentUrls.map(async (url) => {
+          try {
+            const data = await api.getTournament(url);
+            return transformChallongeData(data, url);
+          } catch (err) {
+            console.error(`Failed to load tournament ${url}:`, err);
+            return null;
+          }
+        })
+      );
+
+      setTournaments(results.filter(Boolean));
     } catch (err) {
       setError(err.message);
-      throw err;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [tournamentUrls]);
 
-  const handleScoreSubmitted = useCallback((result) => {
-    // Refresh tournament data when a match is finalized
-    if (tournamentData?.tournament?.url) {
-      setTimeout(() => loadTournament(tournamentData.tournament.url), 1000);
+  // Load tournaments on mount
+  useEffect(() => {
+    loadAllTournaments();
+  }, [loadAllTournaments]);
+
+  // Add a new tournament
+  const addTournament = async (url) => {
+    // Check if already exists
+    if (tournamentUrls.includes(url)) {
+      throw new Error('Tournament already added');
     }
-  }, [tournamentData, loadTournament]);
 
-  // Predefined judges - in production, this would come from a database
+    // Verify it exists by fetching it
+    const data = await api.getTournament(url);
+    const transformed = transformChallongeData(data, url);
+
+    setTournamentUrls(prev => [...prev, url]);
+    setTournaments(prev => [...prev, transformed]);
+  };
+
+  // Remove a tournament
+  const removeTournament = (url) => {
+    setTournamentUrls(prev => prev.filter(u => u !== url));
+    setTournaments(prev => prev.filter(t => t.tournament.url !== url));
+  };
+
+  // Handle score submission
+  const handleScoreSubmitted = useCallback((result) => {
+    // Refresh all tournaments when a match is finalized
+    setTimeout(() => loadAllTournaments(), 1000);
+  }, [loadAllTournaments]);
+
+  // Predefined judges
   const availableJudges = [
     { id: 'judge_1', name: 'Judge 1' },
     { id: 'judge_2', name: 'Judge 2' },
     { id: 'judge_3', name: 'Judge 3' },
   ];
-
-  const [showJudgeSelect, setShowJudgeSelect] = useState(false);
   
   const handleLogin = (role, judgeData = null) => {
     if (role === 'judge' && !judgeData) {
-      // Show judge selection modal
       setShowJudgeSelect(true);
       return;
     }
     
     if (role === 'judge' && judgeData) {
-      setCurrentUser({ 
-        id: judgeData.id, 
-        role: 'judge', 
-        name: judgeData.name 
-      });
+      setCurrentUser({ id: judgeData.id, role: 'judge', name: judgeData.name });
       setShowJudgeSelect(false);
       setView('judge');
       return;
     }
     
-    // Admin login
-    setCurrentUser({ 
-      id: `admin_${Date.now()}`, 
-      role: 'admin', 
-      name: 'Admin User' 
-    });
+    setCurrentUser({ id: `admin_${Date.now()}`, role: 'admin', name: 'Admin User' });
     setView('admin');
   };
   
@@ -1103,9 +1249,6 @@ export default function TournamentJudgingApp() {
     setView('public');
     setShowJudgeSelect(false);
   };
-  
-  // Demo data for when no tournament is loaded
-  const demoMatches = tournamentData?.matches || [];
   
   return (
     <div className={`min-h-screen ${t.bg} transition-colors`}>
@@ -1167,27 +1310,29 @@ export default function TournamentJudgingApp() {
         </div>
       </header>
       
-      {/* Tournament Info Bar */}
+      {/* Event Info Bar */}
       <div className={`${t.headerBg} border-b ${t.divider}`}>
         <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center gap-3">
-            {tournamentData ? (
+            {tournaments.length > 0 ? (
               <>
                 <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
-                  Challonge
+                  {tournaments.length} Tournament{tournaments.length !== 1 ? 's' : ''}
                 </span>
-                <h1 className={`text-lg font-bold ${t.text}`}>{tournamentData.tournament.name}</h1>
-                <span className={`px-2 py-0.5 ${tournamentData.tournament.status === 'underway' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'} text-xs font-semibold rounded`}>
-                  {tournamentData.tournament.status}
+                <h1 className={`text-lg font-bold ${t.text}`}>
+                  {eventName || 'SCAR Event'}
+                </h1>
+                <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded">
+                  Connected
                 </span>
               </>
             ) : (
               <>
                 <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded">
-                  Demo Mode
+                  No Tournaments
                 </span>
                 <h1 className={`text-lg font-bold ${t.text}`}>SCAR Tournament Judge Portal</h1>
-                <span className={`text-sm ${t.textMuted}`}>Connect a Challonge tournament in Admin settings</span>
+                <span className={`text-sm ${t.textMuted}`}>Add tournament URLs in Admin → Tournaments</span>
               </>
             )}
           </div>
@@ -1209,20 +1354,16 @@ export default function TournamentJudgingApp() {
         )}
 
         {!isLoading && view === 'public' && (
-          tournamentData ? (
-            <PublicBracketView matches={demoMatches} onMatchClick={setSelectedMatch} theme={theme} />
-          ) : (
-            <div className={`${t.card} rounded-xl border ${t.cardBorder} p-8 text-center`}>
-              <h3 className={`text-lg font-bold ${t.text} mb-2`}>No Tournament Connected</h3>
-              <p className={t.textMuted}>Go to Admin → Settings to connect a Challonge tournament</p>
-            </div>
-          )
+          <PublicBracketView 
+            tournaments={tournaments} 
+            onMatchClick={setSelectedMatch} 
+            theme={theme} 
+          />
         )}
         
         {!isLoading && view === 'judge' && (
           <JudgeScoringView 
-            matches={demoMatches} 
-            tournamentId={tournamentData?.tournament?.url}
+            tournaments={tournaments}
             currentUser={currentUser}
             onScoreSubmitted={handleScoreSubmitted}
             theme={theme} 
@@ -1231,8 +1372,13 @@ export default function TournamentJudgingApp() {
         
         {!isLoading && view === 'admin' && (
           <AdminDashboardView 
-            tournament={tournamentData?.tournament}
-            onRefresh={loadTournament}
+            eventName={eventName}
+            tournamentUrls={tournamentUrls}
+            tournaments={tournaments}
+            onEventNameChange={setEventName}
+            onAddTournament={addTournament}
+            onRemoveTournament={removeTournament}
+            onRefreshAll={loadAllTournaments}
             theme={theme} 
           />
         )}
@@ -1244,9 +1390,9 @@ export default function TournamentJudgingApp() {
           <div className={`flex flex-col md:flex-row justify-between items-center gap-2 text-sm ${t.textFaint}`}>
             <div>Built for <a href="https://www.socalattackrobots.com/" className={t.blueText}>SCAR</a></div>
             <div className="flex items-center gap-4">
-              <span>Challonge Integration Enabled</span>
+              <span>{tournaments.length} tournament{tournaments.length !== 1 ? 's' : ''} loaded</span>
               <span>•</span>
-              <span>Last updated: {new Date().toLocaleDateString()}</span>
+              <span>Data persists on refresh</span>
             </div>
           </div>
         </div>
@@ -1256,7 +1402,6 @@ export default function TournamentJudgingApp() {
       {selectedMatch && (
         <MatchDetailPopup 
           match={selectedMatch}
-          tournamentId={tournamentData?.tournament?.url}
           onClose={() => setSelectedMatch(null)} 
           theme={theme} 
         />
@@ -1265,10 +1410,7 @@ export default function TournamentJudgingApp() {
       {/* Judge Selection Modal */}
       {showJudgeSelect && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div 
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowJudgeSelect(false)}
-          />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowJudgeSelect(false)} />
           <div className={`relative w-full max-w-sm ${t.card} rounded-2xl border ${t.cardBorder} shadow-2xl overflow-hidden`}>
             <div className={`px-5 py-4 border-b ${t.divider}`}>
               <h2 className={`text-lg font-bold ${t.text}`}>Select Your Judge Position</h2>
@@ -1281,7 +1423,7 @@ export default function TournamentJudgingApp() {
                   onClick={() => handleLogin('judge', judge)}
                   className={`w-full p-4 rounded-xl border-2 ${t.cardBorder} ${t.hoverBg} transition-all text-left flex items-center gap-4`}
                 >
-                  <div className={`w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center`}>
+                  <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
                     <span className="text-xl font-bold text-blue-600">{judge.name.split(' ')[1]}</span>
                   </div>
                   <div>
