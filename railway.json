@@ -1,8 +1,11 @@
 {
   "build": {
-    "builder": "NIXPACKS"
+    "builder": "NIXPACKS",
+    "watchPatterns": ["server/**"]
   },
   "deploy": {
-    "startCommand": "cd server && npm install && npm start"
-  }
+    "startCommand": "cd server && npm start"
+  },
+  "$schema": "https://railway.app/railway.schema.json",
+  "rootDir": "server"
 }
