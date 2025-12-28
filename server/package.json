@@ -1,7 +1,7 @@
 {
-  "name": "scar-tournament-server",
+  "name": "scar-judging-server",
   "version": "1.0.0",
-  "description": "Backend server for SCAR Tournament Judge Portal with Challonge integration",
+  "description": "Backend server for SCAR Tournament Judge Portal",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
@@ -11,9 +11,13 @@
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "node-fetch": "^2.7.0"
+    "node-fetch": "^2.7.0",
+    "pg": "^8.11.3"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
