@@ -242,6 +242,22 @@ app.get('/api/matches/:matchId/scores', (req, res) => {
   });
 });
 
+// GET /api/matches/:matchId/scores/details - Get detailed judge scores for popup
+app.get('/api/matches/:matchId/scores/details', (req, res) => {
+  const { matchId } = req.params;
+  const scores = judgeScores[matchId] || { judges: {} };
+  
+  res.json({
+    matchId,
+    competitorAId: scores.competitorAId,
+    competitorBId: scores.competitorBId,
+    judges: scores.judges,
+    judgeCount: Object.keys(scores.judges).length,
+    finalized: scores.finalized || false,
+    result: scores.result || null,
+  });
+});
+
 // DELETE /api/matches/:matchId/scores/:judgeId - Allow judge to edit (delete and resubmit)
 app.delete('/api/matches/:matchId/scores/:judgeId', (req, res) => {
   const { matchId, judgeId } = req.params;
