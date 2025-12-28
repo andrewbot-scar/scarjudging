@@ -1229,6 +1229,9 @@ export default function TournamentJudgingApp() {
   const [error, setError] = useState(null);
   const [eventLoaded, setEventLoaded] = useState(false);
   
+  // Check if viewing via shared link (hides admin)
+  const isSharedView = Boolean(getUrlParam('event'));
+  
   const theme = darkMode ? 'dark' : 'light';
   const t = themes[theme];
 
@@ -1378,12 +1381,14 @@ export default function TournamentJudgingApp() {
                 }`}>
                 Judge
               </button>
-              <button onClick={() => handleLogin('admin')}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  view === 'admin' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
-                }`}>
-                Admin
-              </button>
+              {!isSharedView && (
+                <button onClick={() => handleLogin('admin')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    view === 'admin' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  }`}>
+                  Admin
+                </button>
+              )}
             </nav>
             
             <div className="flex items-center gap-3">
