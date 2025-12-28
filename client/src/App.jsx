@@ -112,9 +112,29 @@ function transformChallongeData(challongeData) {
     participantMap[p.participant.id] = p.participant.name;
   });
 
+  // Create a mapping from Challonge match ID to suggested_play_order (match number)
+  const matchIdToNumber = {};
+  matches.forEach(m => {
+    const match = m.match;
+    matchIdToNumber[match.id] = match.suggested_play_order || match.id;
+  });
+
   // Transform matches
   const transformedMatches = matches.map(m => {
     const match = m.match;
+    const matchNum = match.suggested_play_order || match.id;
+    
+    // Convert prereq match IDs to match numbers
+    const sourceA = match.player1_prereq_match_id ? {
+      type: match.player1_is_prereq_match_loser ? 'loser' : 'winner',
+      matchNum: matchIdToNumber[match.player1_prereq_match_id] || match.player1_prereq_match_id
+    } : null;
+    
+    const sourceB = match.player2_prereq_match_id ? {
+      type: match.player2_is_prereq_match_loser ? 'loser' : 'winner',
+      matchNum: matchIdToNumber[match.player2_prereq_match_id] || match.player2_prereq_match_id
+    } : null;
+
     return {
       id: match.id,
       challongeId: match.id,
@@ -124,21 +144,32 @@ function transformChallongeData(challongeData) {
       competitorBId: match.player2_id,
       bracket: match.round > 0 ? 'winners' : 'losers',
       round: Math.abs(match.round),
-      matchNum: match.suggested_play_order || match.id,
+      matchNum: matchNum,
       status: match.state === 'complete' ? 'completed' : match.state === 'open' ? 'active' : 'pending',
       winner: match.winner_id ? participantMap[match.winner_id] : null,
       winnerId: match.winner_id,
       winMethod: match.state === 'complete' ? 'points' : null,
       scores: match.scores_csv ? parseScores(match.scores_csv) : { a: 0, b: 0 },
-      sourceA: match.player1_prereq_match_id ? {
-        type: match.player1_is_prereq_match_loser ? 'loser' : 'winner',
-        matchNum: match.player1_prereq_match_id
-      } : null,
-      sourceB: match.player2_prereq_match_id ? {
-        type: match.player2_is_prereq_match_loser ? 'loser' : 'winner',
-        matchNum: match.player2_prereq_match_id
-      } : null,
+      sourceA: sourceA,
+      sourceB: sourceB,
     };
+  });
+
+  // Filter out bracket reset matches (matches with no players that come after Grand Finals)
+  // In double elimination, the bracket reset only happens if the losers bracket winner beats the winners bracket winner
+  const maxMatchNum = Math.max(...transformedMatches.map(m => m.matchNum));
+  const grandFinalsMatch = transformedMatches.find(m => 
+    m.bracket === 'winners' && 
+    m.round === Math.max(...transformedMatches.filter(x => x.bracket === 'winners').map(x => x.round))
+  );
+  
+  // Filter out potential bracket reset match (highest match number with no competitors assigned)
+  const filteredMatches = transformedMatches.filter(m => {
+    // If this is the highest numbered match, has no competitors, and comes after grand finals, hide it
+    if (m.matchNum === maxMatchNum && !m.competitorA && !m.competitorB && grandFinalsMatch && m.matchNum > grandFinalsMatch.matchNum) {
+      return false;
+    }
+    return true;
   });
 
   return {
@@ -153,7 +184,7 @@ function transformChallongeData(challongeData) {
       name: p.participant.name,
       seed: p.participant.seed,
     })),
-    matches: transformedMatches,
+    matches: filteredMatches,
   };
 }
 
