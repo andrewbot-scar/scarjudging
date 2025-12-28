@@ -211,7 +211,7 @@ const StatusBadge = ({ status, winMethod, theme }) => {
 };
 
 // Match Detail Popup Component
-const MatchDetailPopup = ({ match, onClose, theme }) => {
+const MatchDetailPopup = ({ match, tournamentId, onClose, theme }) => {
   const t = themes[theme];
   const [judgeScores, setJudgeScores] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -225,7 +225,8 @@ const MatchDetailPopup = ({ match, onClose, theme }) => {
       setError(null);
       
       try {
-        const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:3001/api'}/matches/${match.challongeId}/scores/details`);
+        const url = `${process.env.REACT_APP_API_URL || 'http://localhost:3001/api'}/matches/${match.challongeId}/scores/details?tournamentId=${tournamentId || ''}`;
+        const response = await fetch(url);
         if (response.ok) {
           const data = await response.json();
           setJudgeScores(data);
@@ -242,7 +243,7 @@ const MatchDetailPopup = ({ match, onClose, theme }) => {
     };
 
     fetchScores();
-  }, [match]);
+  }, [match, tournamentId]);
 
   if (!match) return null;
 
@@ -647,18 +648,24 @@ const PublicBracketView = ({ matches, onMatchClick, theme }) => {
 const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted, theme }) => {
   const t = themes[theme];
   
-  // Get matches that can be scored (active or pending with both competitors assigned)
+  // Get matches that can be scored (active or pending with both competitors assigned, and not completed)
   const scorableMatches = matches.filter(m => 
     (m.status === 'active' || m.status === 'pending') && 
     m.competitorA && 
-    m.competitorB
+    m.competitorB &&
+    m.status !== 'completed'
   );
   
-  // State for selected match
-  const [selectedMatchId, setSelectedMatchId] = useState(null);
+  // State for selected match - initialize to first available match
+  const [selectedMatchId, setSelectedMatchId] = useState(() => {
+    const activeMatch = scorableMatches.find(m => m.status === 'active');
+    return activeMatch?.id || scorableMatches[0]?.id || null;
+  });
+  
+  // Find the selected match, or fall back to first scorable match
   const selectedMatch = selectedMatchId 
-    ? matches.find(m => m.id === selectedMatchId)
-    : scorableMatches.find(m => m.status === 'active') || scorableMatches[0];
+    ? scorableMatches.find(m => m.id === selectedMatchId) || scorableMatches[0]
+    : scorableMatches[0];
   
   const [scores, setScores] = useState({ aggression: 2, damage: 3, control: 1 });
   const [isKO, setIsKO] = useState(false);
@@ -1053,19 +1060,47 @@ export default function TournamentJudgingApp() {
       setTimeout(() => loadTournament(tournamentData.tournament.url), 1000);
     }
   }, [tournamentData, loadTournament]);
+
+  // Predefined judges - in production, this would come from a database
+  const availableJudges = [
+    { id: 'judge_1', name: 'Judge 1' },
+    { id: 'judge_2', name: 'Judge 2' },
+    { id: 'judge_3', name: 'Judge 3' },
+  ];
+
+  const [showJudgeSelect, setShowJudgeSelect] = useState(false);
   
-  const handleLogin = (role) => {
+  const handleLogin = (role, judgeData = null) => {
+    if (role === 'judge' && !judgeData) {
+      // Show judge selection modal
+      setShowJudgeSelect(true);
+      return;
+    }
+    
+    if (role === 'judge' && judgeData) {
+      setCurrentUser({ 
+        id: judgeData.id, 
+        role: 'judge', 
+        name: judgeData.name 
+      });
+      setShowJudgeSelect(false);
+      setView('judge');
+      return;
+    }
+    
+    // Admin login
     setCurrentUser({ 
-      id: `judge_${Date.now()}`, 
-      role, 
-      name: role === 'judge' ? 'Judge Adams' : 'Admin User' 
+      id: `admin_${Date.now()}`, 
+      role: 'admin', 
+      name: 'Admin User' 
     });
-    setView(role);
+    setView('admin');
   };
   
   const handleLogout = () => {
     setCurrentUser(null);
     setView('public');
+    setShowJudgeSelect(false);
   };
   
   // Demo data for when no tournament is loaded
@@ -1219,10 +1254,52 @@ export default function TournamentJudgingApp() {
       {/* Match Detail Popup */}
       {selectedMatch && (
         <MatchDetailPopup 
-          match={selectedMatch} 
+          match={selectedMatch}
+          tournamentId={tournamentData?.tournament?.url}
           onClose={() => setSelectedMatch(null)} 
           theme={theme} 
         />
+      )}
+
+      {/* Judge Selection Modal */}
+      {showJudgeSelect && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setShowJudgeSelect(false)}
+          />
+          <div className={`relative w-full max-w-sm ${t.card} rounded-2xl border ${t.cardBorder} shadow-2xl overflow-hidden`}>
+            <div className={`px-5 py-4 border-b ${t.divider}`}>
+              <h2 className={`text-lg font-bold ${t.text}`}>Select Your Judge Position</h2>
+              <p className={`text-sm ${t.textMuted} mt-1`}>Choose which judge you are</p>
+            </div>
+            <div className="p-5 space-y-3">
+              {availableJudges.map(judge => (
+                <button
+                  key={judge.id}
+                  onClick={() => handleLogin('judge', judge)}
+                  className={`w-full p-4 rounded-xl border-2 ${t.cardBorder} ${t.hoverBg} transition-all text-left flex items-center gap-4`}
+                >
+                  <div className={`w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center`}>
+                    <span className="text-xl font-bold text-blue-600">{judge.name.split(' ')[1]}</span>
+                  </div>
+                  <div>
+                    <p className={`font-semibold ${t.text}`}>{judge.name}</p>
+                    <p className={`text-sm ${t.textMuted}`}>Click to login</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className={`px-5 py-3 border-t ${t.divider} ${t.tableBg}`}>
+              <button
+                onClick={() => setShowJudgeSelect(false)}
+                className={`w-full py-2 rounded-lg border ${t.cardBorder} ${t.text} font-semibold ${t.hoverBg} transition-colors`}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
