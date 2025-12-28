@@ -426,26 +426,26 @@ const getCompetitorDisplay = (competitor, source) => {
   return { text: `${typeLabel} of Match ${source.matchNum}`, isPlaceholder: true };
 };
 
-// Split Point Slider Component
+// Split Point Slider Component - Mobile Optimized
 const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) => {
   const t = themes[theme];
   const valueB = maxPoints - valueA;
   const percentage = (valueA / maxPoints) * 100;
   
   return (
-    <div className="mb-5">
+    <div className="mb-6 sm:mb-5">
       <div className="flex justify-between items-center mb-2">
         <span className={`text-sm font-medium ${t.textMuted}`}>{label}</span>
         <span className={`text-xs ${t.textFaint}`}>{maxPoints} pts total</span>
       </div>
       
-      <div className="flex items-center gap-4">
-        <div className="w-12 text-center">
-          <span className={`text-2xl font-bold ${valueA > valueB ? t.blueText : t.textFaint}`}>{valueA}</span>
+      <div className="flex items-center gap-3 sm:gap-4">
+        <div className="w-10 sm:w-12 text-center">
+          <span className={`text-xl sm:text-2xl font-bold ${valueA > valueB ? t.blueText : t.textFaint}`}>{valueA}</span>
         </div>
         
-        <div className="flex-1 relative">
-          <div className={`h-2 ${t.sliderBg} rounded-full overflow-hidden`}>
+        <div className="flex-1 relative py-2">
+          <div className={`h-3 sm:h-2 ${t.sliderBg} rounded-full overflow-hidden`}>
             <div className={`h-full ${t.sliderFill} transition-all duration-150`} style={{ width: `${percentage}%` }} />
           </div>
           <input
@@ -453,23 +453,24 @@ const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) =>
             onChange={(e) => onChange(parseInt(e.target.value))}
             disabled={disabled}
             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+            style={{ touchAction: 'none' }}
           />
-          <div className="flex justify-between mt-1 px-0.5">
+          <div className="flex justify-between mt-2 px-0.5">
             {[...Array(maxPoints + 1)].map((_, i) => (
-              <div key={i} className={`w-0.5 h-1.5 ${t.tickMark} rounded-full`} />
+              <div key={i} className={`w-1 sm:w-0.5 h-2 sm:h-1.5 ${t.tickMark} rounded-full`} />
             ))}
           </div>
         </div>
         
-        <div className="w-12 text-center">
-          <span className={`text-2xl font-bold ${valueB > valueA ? t.redText : t.textFaint}`}>{valueB}</span>
+        <div className="w-10 sm:w-12 text-center">
+          <span className={`text-xl sm:text-2xl font-bold ${valueB > valueA ? t.redText : t.textFaint}`}>{valueB}</span>
         </div>
       </div>
     </div>
   );
 };
 
-// Match Card Component
+// Match Card Component - Mobile Optimized
 const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
   const t = themes[theme];
   const isActive = match.status === 'active';
@@ -482,19 +483,19 @@ const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
       onClick={onClick}
       className={`
         ${t.card} rounded-lg border overflow-hidden cursor-pointer
-        transition-all duration-200 hover:shadow-md
+        transition-all duration-200 hover:shadow-md active:scale-[0.98]
         ${isActive ? 'border-amber-400 ring-2 ring-amber-200' : `${t.cardBorder} hover:border-gray-400`}
       `}
     >
       <div className="p-3">
         <div className="flex justify-between items-center mb-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             {showTournament && (
-              <span className={`text-xs px-1.5 py-0.5 rounded ${t.tableBg} ${t.textFaint} truncate max-w-[120px]`}>
+              <span className={`text-xs px-1.5 py-0.5 rounded ${t.tableBg} ${t.textFaint} truncate max-w-[100px] sm:max-w-[120px]`}>
                 {match.tournamentName}
               </span>
             )}
-            <span className={`text-xs ${t.textFaint} font-mono`}>M{match.matchNum}</span>
+            <span className={`text-xs ${t.textFaint} font-mono flex-shrink-0`}>M{match.matchNum}</span>
           </div>
           <StatusBadge status={match.status} winMethod={match.winMethod} theme={theme} />
         </div>
@@ -503,7 +504,7 @@ const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
           <div className={`flex justify-between items-center p-2 rounded ${
             match.winner === match.competitorA && match.competitorA ? t.winnerBg : t.tableBg
           }`}>
-            <span className={`text-sm ${
+            <span className={`text-sm truncate mr-2 ${
               compA.isPlaceholder ? `${t.textFaint} italic` 
                 : match.winner === match.competitorA ? `font-semibold ${t.winnerText}` 
                 : `font-semibold ${t.text}`
@@ -512,14 +513,14 @@ const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
               {match.winner === match.competitorA && match.competitorA && ' ✓'}
             </span>
             {match.status === 'completed' && match.winMethod === 'points' && (
-              <span className={`text-sm font-mono ${t.textMuted}`}>{match.scores?.a}</span>
+              <span className={`text-sm font-mono ${t.textMuted} flex-shrink-0`}>{match.scores?.a}</span>
             )}
           </div>
           
           <div className={`flex justify-between items-center p-2 rounded ${
             match.winner === match.competitorB && match.competitorB ? t.winnerBg : t.tableBg
           }`}>
-            <span className={`text-sm ${
+            <span className={`text-sm truncate mr-2 ${
               compB.isPlaceholder ? `${t.textFaint} italic` 
                 : match.winner === match.competitorB ? `font-semibold ${t.winnerText}` 
                 : `font-semibold ${t.text}`
@@ -528,7 +529,7 @@ const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
               {match.winner === match.competitorB && match.competitorB && ' ✓'}
             </span>
             {match.status === 'completed' && match.winMethod === 'points' && (
-              <span className={`text-sm font-mono ${t.textMuted}`}>{match.scores?.b}</span>
+              <span className={`text-sm font-mono ${t.textMuted} flex-shrink-0`}>{match.scores?.b}</span>
             )}
           </div>
         </div>
@@ -537,14 +538,14 @@ const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
   );
 };
 
-// Public Bracket View
+// Public Bracket View - Mobile Optimized
 const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
   const t = themes[theme];
   const [selectedTournamentIndex, setSelectedTournamentIndex] = useState(0);
   
   if (!tournaments || tournaments.length === 0) {
     return (
-      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-8 text-center`}>
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-6 sm:p-8 text-center`}>
         <h3 className={`text-lg font-bold ${t.text} mb-2`}>No Tournaments Connected</h3>
         <p className={t.textMuted}>Go to Admin → Tournaments to add tournament URLs</p>
       </div>
@@ -568,21 +569,21 @@ const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
       return `Round ${round}`;
     } else {
       if (round === totalRounds) return 'Losers Finals';
-      if (round === totalRounds - 1) return 'Losers Semifinals';
+      if (round === totalRounds - 1) return 'Losers Semis';
       return `Round ${round}`;
     }
   };
   
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {tournaments.length > 1 && (
         <div className={`${t.card} rounded-xl border ${t.cardBorder} p-2`}>
-          <div className="flex gap-2 overflow-x-auto">
+          <div className="flex gap-2 overflow-x-auto pb-1 -mb-1">
             {tournaments.map((tourney, index) => (
               <button
                 key={tourney.tournament.id}
                 onClick={() => setSelectedTournamentIndex(index)}
-                className={`px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-colors ${
+                className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-semibold whitespace-nowrap transition-colors ${
                   selectedTournamentIndex === index 
                     ? 'bg-blue-600 text-white' 
                     : `${t.textMuted} ${t.hoverBg}`
@@ -595,21 +596,21 @@ const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
         </div>
       )}
 
-      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5`}>
-        <h2 className={`text-lg font-bold ${t.text} mb-4 flex items-center gap-2`}>
-          <span className="w-3 h-3 rounded-full bg-green-500"></span>
-          Winners Bracket
-          <span className={`text-sm font-normal ${t.textMuted}`}>- {currentTournament?.tournament.name}</span>
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-3 sm:p-5`}>
+        <h2 className={`text-base sm:text-lg font-bold ${t.text} mb-3 sm:mb-4 flex items-center gap-2`}>
+          <span className="w-3 h-3 rounded-full bg-green-500 flex-shrink-0"></span>
+          <span className="truncate">Winners Bracket</span>
+          <span className={`text-xs sm:text-sm font-normal ${t.textMuted} truncate hidden sm:inline`}>- {currentTournament?.tournament.name}</span>
         </h2>
-        <div className="flex gap-6 overflow-x-auto pb-2">
+        <div className="flex gap-3 sm:gap-6 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0">
           {winnersRounds.map(round => {
             const roundMatches = winnersMatches.filter(m => m.round === round);
             return (
-              <div key={round} className="min-w-[260px] flex flex-col">
-                <p className={`text-xs font-semibold ${t.textFaint} uppercase tracking-wide mb-3`}>
+              <div key={round} className="min-w-[220px] sm:min-w-[260px] flex flex-col flex-shrink-0">
+                <p className={`text-xs font-semibold ${t.textFaint} uppercase tracking-wide mb-2 sm:mb-3`}>
                   {getRoundLabel(round, winnersRounds.length, true)}
                 </p>
-                <div className="space-y-3 flex-1 flex flex-col justify-around">
+                <div className="space-y-2 sm:space-y-3 flex-1 flex flex-col justify-around">
                   {roundMatches.map(match => (
                     <MatchCard key={match.id} match={match} onClick={() => onMatchClick(match)} theme={theme} />
                   ))}
@@ -621,20 +622,20 @@ const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
       </div>
       
       {losersMatches.length > 0 && (
-        <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5`}>
-          <h2 className={`text-lg font-bold ${t.text} mb-4 flex items-center gap-2`}>
-            <span className="w-3 h-3 rounded-full bg-red-500"></span>
+        <div className={`${t.card} rounded-xl border ${t.cardBorder} p-3 sm:p-5`}>
+          <h2 className={`text-base sm:text-lg font-bold ${t.text} mb-3 sm:mb-4 flex items-center gap-2`}>
+            <span className="w-3 h-3 rounded-full bg-red-500 flex-shrink-0"></span>
             Losers Bracket
           </h2>
-          <div className="flex gap-6 overflow-x-auto pb-2">
+          <div className="flex gap-3 sm:gap-6 overflow-x-auto pb-2 -mx-3 px-3 sm:mx-0 sm:px-0">
             {losersRounds.map(round => {
               const roundMatches = losersMatches.filter(m => m.round === round);
               return (
-                <div key={round} className="min-w-[260px] flex flex-col">
-                  <p className={`text-xs font-semibold ${t.textFaint} uppercase tracking-wide mb-3`}>
+                <div key={round} className="min-w-[220px] sm:min-w-[260px] flex flex-col flex-shrink-0">
+                  <p className={`text-xs font-semibold ${t.textFaint} uppercase tracking-wide mb-2 sm:mb-3`}>
                     {getRoundLabel(round, losersRounds.length, false)}
                   </p>
-                  <div className="space-y-3 flex-1 flex flex-col justify-around">
+                  <div className="space-y-2 sm:space-y-3 flex-1 flex flex-col justify-around">
                     {roundMatches.map(match => (
                       <MatchCard key={match.id} match={match} onClick={() => onMatchClick(match)} theme={theme} />
                     ))}
@@ -773,15 +774,15 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
   }, {});
 
   return (
-    <div className="max-w-xl mx-auto space-y-4">
-      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-4`}>
+    <div className="max-w-xl mx-auto space-y-3 sm:space-y-4">
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-3 sm:p-4`}>
         <label className={`block text-sm font-medium ${t.textMuted} mb-2`}>
           Select Match to Score ({sortedMatches.length} available)
         </label>
         <select
           value={selectedMatchKey || ''}
           onChange={(e) => handleMatchChange(e.target.value)}
-          className={`w-full px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+          className={`w-full px-3 py-3 sm:py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-base sm:text-sm`}
         >
           {Object.entries(matchesByTournament).map(([tournamentName, matches]) => (
             <optgroup key={tournamentName} label={tournamentName}>
@@ -812,8 +813,8 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
         </div>
       )}
 
-      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5`}>
-        <div className="flex justify-between items-start mb-4">
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-4 sm:p-5`}>
+        <div className="flex justify-between items-start mb-3 sm:mb-4">
           <div>
             <span className={`text-xs px-2 py-0.5 rounded ${t.tableBg} ${t.textMuted} mb-1 inline-block`}>
               {selectedMatch.tournamentName}
@@ -824,10 +825,10 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
             </div>
           </div>
           <div className="text-right">
-            <span className={`text-xs ${t.textFaint}`}>Judges submitted</span>
+            <span className={`text-xs ${t.textFaint}`}>Judges</span>
             <div className="flex gap-1 justify-end mt-1">
               {[0, 1, 2].map(i => (
-                <div key={i} className={`w-2.5 h-2.5 rounded-full ${
+                <div key={i} className={`w-3 h-3 sm:w-2.5 sm:h-2.5 rounded-full ${
                   submitResult ? (i < submitResult.judgeCount ? 'bg-green-500' : t.tickMark) : t.tickMark
                 }`} />
               ))}
@@ -835,29 +836,29 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
           </div>
         </div>
         
-        <div className="grid grid-cols-3 items-center gap-4">
+        <div className="grid grid-cols-3 items-center gap-2 sm:gap-4">
           <div className="text-center">
-            <div className="w-14 h-14 mx-auto rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center mb-2">
-              <span className="text-xl font-bold text-blue-600">{selectedMatch.competitorA?.[0] || '?'}</span>
+            <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center mb-1 sm:mb-2">
+              <span className="text-lg sm:text-xl font-bold text-blue-600">{selectedMatch.competitorA?.[0] || '?'}</span>
             </div>
-            <p className={`font-semibold ${t.text} text-sm`}>{selectedMatch.competitorA || 'TBD'}</p>
-            <p className={`text-2xl font-bold ${t.blueText} mt-1`}>{isKO ? '—' : totalA}</p>
+            <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorA || 'TBD'}</p>
+            <p className={`text-xl sm:text-2xl font-bold ${t.blueText} mt-1`}>{isKO ? '—' : totalA}</p>
           </div>
           <div className="text-center">
-            <span className={`${t.textFaint} font-medium`}>vs</span>
+            <span className={`${t.textFaint} font-medium text-sm`}>vs</span>
           </div>
           <div className="text-center">
-            <div className="w-14 h-14 mx-auto rounded-lg bg-red-100 border border-red-200 flex items-center justify-center mb-2">
-              <span className="text-xl font-bold text-red-600">{selectedMatch.competitorB?.[0] || '?'}</span>
+            <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto rounded-lg bg-red-100 border border-red-200 flex items-center justify-center mb-1 sm:mb-2">
+              <span className="text-lg sm:text-xl font-bold text-red-600">{selectedMatch.competitorB?.[0] || '?'}</span>
             </div>
-            <p className={`font-semibold ${t.text} text-sm`}>{selectedMatch.competitorB || 'TBD'}</p>
-            <p className={`text-2xl font-bold ${t.redText} mt-1`}>{isKO ? '—' : totalB}</p>
+            <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorB || 'TBD'}</p>
+            <p className={`text-xl sm:text-2xl font-bold ${t.redText} mt-1`}>{isKO ? '—' : totalB}</p>
           </div>
         </div>
       </div>
       
       {!isKO && !submitResult?.finalized && (
-        <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5`}>
+        <div className={`${t.card} rounded-xl border ${t.cardBorder} p-4 sm:p-5`}>
           <h3 className={`text-sm font-semibold ${t.textFaint} uppercase tracking-wide mb-4`}>Split Points</h3>
           
           <SplitSlider label="Aggression" maxPoints={3} valueA={scores.aggression}
@@ -870,39 +871,39 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
           <div className={`flex justify-between items-center pt-4 mt-4 border-t ${t.divider}`}>
             <div className="text-center">
               <p className={`text-xs ${t.textFaint} mb-1`}>Total</p>
-              <p className={`text-3xl font-bold ${t.blueText}`}>{totalA}</p>
+              <p className={`text-2xl sm:text-3xl font-bold ${t.blueText}`}>{totalA}</p>
             </div>
             <div className={`text-xs ${t.textFaint}`}>of 11</div>
             <div className="text-center">
               <p className={`text-xs ${t.textFaint} mb-1`}>Total</p>
-              <p className={`text-3xl font-bold ${t.redText}`}>{totalB}</p>
+              <p className={`text-2xl sm:text-3xl font-bold ${t.redText}`}>{totalB}</p>
             </div>
           </div>
         </div>
       )}
       
       {!submitResult?.finalized && (
-        <div className={`rounded-xl border p-5 transition-colors ${
+        <div className={`rounded-xl border p-4 sm:p-5 transition-colors ${
           isKO ? 'bg-red-50 border-red-300' : `${t.card} ${t.cardBorder}`
         }`}>
           <label className="flex items-center gap-3 cursor-pointer">
             <input type="checkbox" checked={isKO}
               onChange={(e) => { setIsKO(e.target.checked); if (!e.target.checked) setKoWinner(null); }}
               disabled={hasSubmitted}
-              className="w-5 h-5 rounded border-gray-300 text-red-600 focus:ring-red-500" />
+              className="w-6 h-6 sm:w-5 sm:h-5 rounded border-gray-300 text-red-600 focus:ring-red-500" />
             <span className={`font-semibold ${isKO ? 'text-red-700' : t.text}`}>Declare Knockout (KO)</span>
           </label>
           
           {isKO && (
             <div className="mt-4 grid grid-cols-2 gap-3">
               <button onClick={() => setKoWinner('a')} disabled={hasSubmitted}
-                className={`p-3 rounded-lg border-2 font-semibold transition-all ${
+                className={`p-3 sm:p-3 rounded-lg border-2 font-semibold transition-all text-sm sm:text-base ${
                   koWinner === 'a' ? 'bg-blue-50 border-blue-500 text-blue-700' : `${t.card} ${t.cardBorder} ${t.text}`
                 }`}>
                 {selectedMatch.competitorA}
               </button>
               <button onClick={() => setKoWinner('b')} disabled={hasSubmitted}
-                className={`p-3 rounded-lg border-2 font-semibold transition-all ${
+                className={`p-3 rounded-lg border-2 font-semibold transition-all text-sm sm:text-base ${
                   koWinner === 'b' ? 'bg-red-50 border-red-500 text-red-700' : `${t.card} ${t.cardBorder} ${t.text}`
                 }`}>
                 {selectedMatch.competitorB}
@@ -922,13 +923,13 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
               </p>
             </div>
             <button onClick={handleEdit}
-              className={`w-full py-3 rounded-lg border ${t.cardBorder} ${t.text} font-semibold ${t.hoverBg} transition-colors`}>
+              className={`w-full py-4 sm:py-3 rounded-lg border ${t.cardBorder} ${t.text} font-semibold ${t.hoverBg} transition-colors active:scale-[0.98]`}>
               Edit My Scores
             </button>
           </div>
         ) : (
           <button onClick={handleSubmit} disabled={(isKO && !koWinner) || isSubmitting}
-            className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            className="w-full py-4 sm:py-3 rounded-lg bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-base transition-colors disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]">
             {isSubmitting ? 'Submitting...' : 'Submit Scores'}
           </button>
         )
@@ -1364,11 +1365,12 @@ export default function TournamentJudgingApp() {
       <header className={`${t.headerBg} border-b ${t.divider} sticky top-0 z-40`}>
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex justify-between items-center h-14">
-            <div className="flex items-center gap-4">
-              <a href="#" className={`font-bold ${t.text} text-lg`}>SCAR Judge Portal</a>
+            <div className="flex items-center gap-2 sm:gap-4">
+              <a href="#" className={`font-bold ${t.text} text-base sm:text-lg`}>SCAR Judge Portal</a>
             </div>
             
-            <nav className="flex items-center gap-1">
+            {/* Desktop Navigation */}
+            <nav className="hidden sm:flex items-center gap-1">
               <button onClick={() => { setView('public'); setCurrentUser(null); }}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                   view === 'public' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
@@ -1390,15 +1392,44 @@ export default function TournamentJudgingApp() {
                 </button>
               )}
             </nav>
+
+            {/* Mobile Navigation */}
+            <nav className="flex sm:hidden items-center gap-1">
+              <button onClick={() => { setView('public'); setCurrentUser(null); }}
+                className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  view === 'public' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                }`}>
+                Bracket
+              </button>
+              <button onClick={() => handleLogin('judge')}
+                className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                  view === 'judge' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                }`}>
+                Judge
+              </button>
+              {!isSharedView && (
+                <button onClick={() => handleLogin('admin')}
+                  className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    view === 'admin' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  }`}>
+                  Admin
+                </button>
+              )}
+            </nav>
             
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               {currentUser && (
-                <div className={`flex items-center gap-3 pr-3 border-r ${t.divider}`}>
+                <div className={`hidden sm:flex items-center gap-3 pr-3 border-r ${t.divider}`}>
                   <span className={`text-sm ${t.textMuted}`}>{currentUser.name}</span>
                   <button onClick={handleLogout} className="text-sm text-red-500 hover:text-red-400 font-medium">
                     Logout
                   </button>
                 </div>
+              )}
+              {currentUser && (
+                <button onClick={handleLogout} className="sm:hidden text-xs text-red-500 font-medium px-2 py-1">
+                  Logout
+                </button>
               )}
               
               <button onClick={() => setDarkMode(!darkMode)}
@@ -1419,38 +1450,36 @@ export default function TournamentJudgingApp() {
         </div>
       </header>
       
+      {/* Event Info Bar - Mobile Responsive */}
       <div className={`${t.headerBg} border-b ${t.divider}`}>
-        <div className="max-w-6xl mx-auto px-4 py-3">
-          <div className="flex items-center gap-3">
+        <div className="max-w-6xl mx-auto px-4 py-2 sm:py-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             {tournaments.length > 0 ? (
               <>
                 <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
                   {tournaments.length} Tournament{tournaments.length !== 1 ? 's' : ''}
                 </span>
-                <h1 className={`text-lg font-bold ${t.text}`}>
+                <h1 className={`text-base sm:text-lg font-bold ${t.text}`}>
                   {eventName || 'SCAR Event'}
                 </h1>
-                <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded">
+                <span className="hidden sm:inline px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded">
                   Connected
                 </span>
-                {eventId && (
-                  <span className={`text-xs ${t.textFaint}`}>(?event={eventId})</span>
-                )}
               </>
             ) : (
               <>
                 <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded">
                   No Tournaments
                 </span>
-                <h1 className={`text-lg font-bold ${t.text}`}>SCAR Tournament Judge Portal</h1>
-                <span className={`text-sm ${t.textMuted}`}>Add tournament URLs in Admin → Tournaments</span>
+                <h1 className={`text-base sm:text-lg font-bold ${t.text}`}>SCAR Judge Portal</h1>
+                <span className={`hidden sm:inline text-sm ${t.textMuted}`}>Add tournaments in Admin</span>
               </>
             )}
           </div>
         </div>
       </div>
       
-      <main className="max-w-6xl mx-auto px-4 py-6">
+      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
         {isLoading && (
           <div className={`${t.card} rounded-xl border ${t.cardBorder} p-8 text-center`}>
             <p className={t.text}>Loading tournament data...</p>
@@ -1499,13 +1528,13 @@ export default function TournamentJudgingApp() {
       </main>
       
       <footer className={`border-t ${t.divider} ${t.headerBg} mt-auto`}>
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className={`flex flex-col md:flex-row justify-between items-center gap-2 text-sm ${t.textFaint}`}>
+        <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4">
+          <div className={`flex flex-col sm:flex-row justify-between items-center gap-1 sm:gap-2 text-xs sm:text-sm ${t.textFaint}`}>
             <div>Built for <a href="https://www.socalattackrobots.com/" className={t.blueText}>SCAR</a></div>
-            <div className="flex items-center gap-4">
-              <span>{tournaments.length} tournament{tournaments.length !== 1 ? 's' : ''} loaded</span>
-              <span>•</span>
-              <span>Shareable via URL</span>
+            <div className="flex items-center gap-2 sm:gap-4">
+              <span>{tournaments.length} tournament{tournaments.length !== 1 ? 's' : ''}</span>
+              <span className="hidden sm:inline">•</span>
+              <span className="hidden sm:inline">Shareable via URL</span>
             </div>
           </div>
         </div>
