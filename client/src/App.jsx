@@ -1325,6 +1325,162 @@ export default function TournamentJudgingApp() {
                 <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded">
                   Connected
                 </span>
+                {eventId && (
+                  <span className={`text-xs ${t.textFaint}`}>(?event={eventId})</span>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded">
+                  No Tournaments
+                </span>
+                <h1 className={`text-lg font-bold ${t.text}`}>SCAR Tournament Judge Portal</h1>
+                <span className={`text-sm ${t.textMuted}`}>Add tournament URLs in Admin → Tournaments</span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      
+      {/* Main Content */}
+      <main className="max-w-6xl mx-auto px-4 py-6">
+        {isLoading && (
+          <div className={`${t.card} rounded-xl border ${t.cardBorder} p-8 text-center`}>
+            <p className={t.text}>Loading tournament data...</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+            <p className="text-red-700">{error}</p>
+          </div>
+        )}
+
+        {!isLoading && view === 'public' && (
+          <PublicBracketView 
+            tournaments={tournaments} 
+            onMatchClick={setSelectedMatch} 
+            theme={theme} 
+          />
+        )}
+        
+        {!isLoading && view === 'judge' && (
+          <JudgeScoringView 
+            tournaments={tournaments}
+            currentUser={currentUser}
+            onScoreSubmitted={handleScoreSubmitted}
+            theme={theme} 
+          />
+        )}
+        
+        {!isLoading && view === 'admin' && (
+          <AdminDashboardView 
+            eventId={eventId}
+            eventName={eventName}
+            tournamentUrls={tournamentUrls}
+            tournaments={tournaments}
+            onEventIdChange={setEventId}
+            onEventNameChange={setEventName}
+            onAddTournament={addTournament}
+            onRemoveTournament={removeTournament}
+            onRefreshAll={loadAllTournaments}
+            onSaveToServer={saveToServer}
+            onCopyLink={copyLink}
+            theme={theme} 
+          />
+        )}
+      </main>
+      
+      {/* Footer */}
+      <footer className={`border-t ${t.divider} ${t.headerBg} mt-auto`}>
+        <div className="max-w-6xl mx-auto px-4 py-4">
+          <div className={`flex flex-col md:flex-row justify-between items-center gap-2 text-sm ${t.textFaint}`}>
+            <div>Built for <a href="https://www.socalattackrobots.com/" className={t.blueText}>SCAR</a></div>
+            <div className="flex items-center gap-4">
+              <span>{tournaments.length} tournament{tournaments.length !== 1 ? 's' : ''} loaded</span>
+              <span>•</span>
+              <span>Shareable via URL</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+
+      {/* Match Detail Popup */}
+      {selectedMatch && (
+        <MatchDetailPopup 
+          match={selectedMatch}
+          onClose={() => setSelectedMatch(null)} 
+          theme={theme} 
+        />
+      )}
+
+      {/* Judge Selection Modal */}
+      {showJudgeSelect && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowJudgeSelect(false)} />
+          <div className={`relative w-full max-w-sm ${t.card} rounded-2xl border ${t.cardBorder} shadow-2xl overflow-hidden`}>
+            <div className={`px-5 py-4 border-b ${t.divider}`}>
+              <h2 className={`text-lg font-bold ${t.text}`}>Select Your Judge Position</h2>
+              <p className={`text-sm ${t.textMuted} mt-1`}>Choose which judge you are</p>
+            </div>
+            <div className="p-5 space-y-3">
+              {availableJudges.map(judge => (
+                <button
+                  key={judge.id}
+                  onClick={() => handleLogin('judge', judge)}
+                  className={`w-full p-4 rounded-xl border-2 ${t.cardBorder} ${t.hoverBg} transition-all text-left flex items-center gap-4`}
+                >
+                  <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                    <span className="text-xl font-bold text-blue-600">{judge.name.split(' ')[1]}</span>
+                  </div>
+                  <div>
+                    <p className={`font-semibold ${t.text}`}>{judge.name}</p>
+                    <p className={`text-sm ${t.textMuted}`}>Click to login</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className={`px-5 py-3 border-t ${t.divider} ${t.tableBg}`}>
+              <button
+                onClick={() => setShowJudgeSelect(false)}
+                className={`w-full py-2 rounded-lg border ${t.cardBorder} ${t.text} font-semibold ${t.hoverBg} transition-colors`}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+      
+      {/* Event Info Bar */}
+      <div className={`${t.headerBg} border-b ${t.divider}`}>
+        <div className="max-w-6xl mx-auto px-4 py-3">
+          <div className="flex items-center gap-3">
+            {tournaments.length > 0 ? (
+              <>
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
+                  {tournaments.length} Tournament{tournaments.length !== 1 ? 's' : ''}
+                </span>
+                <h1 className={`text-lg font-bold ${t.text}`}>
+                  {eventName || 'SCAR Event'}
+                </h1>
+                <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded">
+                  Connected
+                </span>
               </>
             ) : (
               <>
