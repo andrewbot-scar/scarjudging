@@ -3,12 +3,27 @@ import React, { useState, useEffect, useCallback } from 'react';
 // API Configuration
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-// Local Storage Keys
+// Local Storage Keys (for local preferences only)
 const STORAGE_KEYS = {
-  EVENT_NAME: 'scar_event_name',
-  TOURNAMENTS: 'scar_tournaments',
   DARK_MODE: 'scar_dark_mode',
 };
+
+// Helper to get URL parameters
+function getUrlParam(param) {
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get(param);
+}
+
+// Helper to update URL without reload
+function setUrlParam(param, value) {
+  const url = new URL(window.location.href);
+  if (value) {
+    url.searchParams.set(param, value);
+  } else {
+    url.searchParams.delete(param);
+  }
+  window.history.replaceState({}, '', url);
+}
 
 // API Service
 const api = {
@@ -39,6 +54,34 @@ const api = {
       method: 'DELETE',
     });
     if (!response.ok) throw new Error('Failed to delete score');
+    return response.json();
+  },
+
+  // Event API
+  async getEvent(eventId) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}`);
+    if (!response.ok) {
+      if (response.status === 404) return null;
+      throw new Error('Failed to fetch event');
+    }
+    return response.json();
+  },
+
+  async saveEvent(eventId, name, tournaments) {
+    const response = await fetch(`${API_BASE_URL}/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ eventId, name, tournaments }),
+    });
+    if (!response.ok) throw new Error('Failed to save event');
+    return response.json();
+  },
+
+  async deleteEvent(eventId) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('Failed to delete event');
     return response.json();
   },
 };
@@ -113,25 +156,21 @@ function transformChallongeData(challongeData, tournamentUrl) {
   const participants = tournament.participants || [];
   const matches = tournament.matches || [];
 
-  // Create participant lookup
   const participantMap = {};
   participants.forEach(p => {
     participantMap[p.participant.id] = p.participant.name;
   });
 
-  // Create a mapping from Challonge match ID to suggested_play_order (match number)
   const matchIdToNumber = {};
   matches.forEach(m => {
     const match = m.match;
     matchIdToNumber[match.id] = match.suggested_play_order || match.id;
   });
 
-  // Transform matches
   const transformedMatches = matches.map(m => {
     const match = m.match;
     const matchNum = match.suggested_play_order || match.id;
     
-    // Convert prereq match IDs to match numbers
     const sourceA = match.player1_prereq_match_id ? {
       type: match.player1_is_prereq_match_loser ? 'loser' : 'winner',
       matchNum: matchIdToNumber[match.player1_prereq_match_id] || match.player1_prereq_match_id
@@ -159,14 +198,12 @@ function transformChallongeData(challongeData, tournamentUrl) {
       scores: match.scores_csv ? parseScores(match.scores_csv) : { a: 0, b: 0 },
       sourceA: sourceA,
       sourceB: sourceB,
-      // Add tournament context for multi-tournament support
       tournamentName: tournament.name,
       tournamentUrl: tournamentUrl || tournament.url,
       tournamentId: tournament.id,
     };
   });
 
-  // Filter out bracket reset matches
   const maxMatchNum = Math.max(...transformedMatches.map(m => m.matchNum));
   const grandFinalsMatch = transformedMatches.find(m => 
     m.bracket === 'winners' && 
@@ -432,7 +469,7 @@ const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) =>
   );
 };
 
-// Match Card Component (updated with tournament name)
+// Match Card Component
 const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
   const t = themes[theme];
   const isActive = match.status === 'active';
@@ -500,7 +537,7 @@ const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
   );
 };
 
-// Public Bracket View (updated for multi-tournament)
+// Public Bracket View
 const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
   const t = themes[theme];
   const [selectedTournamentIndex, setSelectedTournamentIndex] = useState(0);
@@ -509,7 +546,7 @@ const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
     return (
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-8 text-center`}>
         <h3 className={`text-lg font-bold ${t.text} mb-2`}>No Tournaments Connected</h3>
-        <p className={t.textMuted}>Go to Admin → Settings to add tournament URLs</p>
+        <p className={t.textMuted}>Go to Admin → Tournaments to add tournament URLs</p>
       </div>
     );
   }
@@ -538,7 +575,6 @@ const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
   
   return (
     <div className="space-y-6">
-      {/* Tournament Selector Tabs */}
       {tournaments.length > 1 && (
         <div className={`${t.card} rounded-xl border ${t.cardBorder} p-2`}>
           <div className="flex gap-2 overflow-x-auto">
@@ -559,7 +595,6 @@ const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
         </div>
       )}
 
-      {/* Winners Bracket */}
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5`}>
         <h2 className={`text-lg font-bold ${t.text} mb-4 flex items-center gap-2`}>
           <span className="w-3 h-3 rounded-full bg-green-500"></span>
@@ -585,7 +620,6 @@ const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
         </div>
       </div>
       
-      {/* Losers Bracket */}
       {losersMatches.length > 0 && (
         <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5`}>
           <h2 className={`text-lg font-bold ${t.text} mb-4 flex items-center gap-2`}>
@@ -615,11 +649,10 @@ const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
   );
 };
 
-// Judge Scoring View - UNIFIED across all tournaments
+// Judge Scoring View
 const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme }) => {
   const t = themes[theme];
   
-  // Combine all scorable matches from all tournaments
   const allScorableMatches = tournaments.flatMap(tourney => 
     (tourney.matches || []).filter(m => 
       (m.status === 'active' || m.status === 'pending') && 
@@ -629,7 +662,6 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
     )
   );
 
-  // Sort: active matches first, then by tournament name, then by match number
   const sortedMatches = [...allScorableMatches].sort((a, b) => {
     if (a.status === 'active' && b.status !== 'active') return -1;
     if (b.status === 'active' && a.status !== 'active') return 1;
@@ -637,14 +669,12 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
     return a.matchNum - b.matchNum;
   });
 
-  // State for selected match
   const [selectedMatchKey, setSelectedMatchKey] = useState(() => {
     const activeMatch = sortedMatches.find(m => m.status === 'active');
     const firstMatch = activeMatch || sortedMatches[0];
     return firstMatch ? `${firstMatch.tournamentUrl}-${firstMatch.id}` : null;
   });
   
-  // Find the selected match
   const selectedMatch = selectedMatchKey 
     ? sortedMatches.find(m => `${m.tournamentUrl}-${m.id}` === selectedMatchKey) || sortedMatches[0]
     : sortedMatches[0];
@@ -660,7 +690,6 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
   const totalA = scores.aggression + scores.damage + scores.control;
   const totalB = 11 - totalA;
 
-  // Reset form when match changes
   const handleMatchChange = (matchKey) => {
     setSelectedMatchKey(matchKey);
     setScores({ aggression: 2, damage: 3, control: 1 });
@@ -737,7 +766,6 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
     );
   }
   
-  // Group matches by tournament for the dropdown
   const matchesByTournament = sortedMatches.reduce((acc, match) => {
     if (!acc[match.tournamentName]) acc[match.tournamentName] = [];
     acc[match.tournamentName].push(match);
@@ -746,7 +774,6 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
 
   return (
     <div className="max-w-xl mx-auto space-y-4">
-      {/* Match Selector - grouped by tournament */}
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-4`}>
         <label className={`block text-sm font-medium ${t.textMuted} mb-2`}>
           Select Match to Score ({sortedMatches.length} available)
@@ -769,14 +796,12 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
         </select>
       </div>
 
-      {/* Error Display */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
           <p className="text-red-700 font-semibold">Error: {error}</p>
         </div>
       )}
 
-      {/* Match Finalized Notice */}
       {submitResult?.finalized && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
           <p className="text-green-700 font-semibold">🏆 Match Complete!</p>
@@ -787,7 +812,6 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
         </div>
       )}
 
-      {/* Match Info Card */}
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5`}>
         <div className="flex justify-between items-start mb-4">
           <div>
@@ -832,7 +856,6 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
         </div>
       </div>
       
-      {/* Scoring Card */}
       {!isKO && !submitResult?.finalized && (
         <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5`}>
           <h3 className={`text-sm font-semibold ${t.textFaint} uppercase tracking-wide mb-4`}>Split Points</h3>
@@ -858,7 +881,6 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
         </div>
       )}
       
-      {/* KO Option */}
       {!submitResult?.finalized && (
         <div className={`rounded-xl border p-5 transition-colors ${
           isKO ? 'bg-red-50 border-red-300' : `${t.card} ${t.cardBorder}`
@@ -890,7 +912,6 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
         </div>
       )}
       
-      {/* Submit Area */}
       {!submitResult?.finalized && (
         hasSubmitted ? (
           <div className="space-y-3">
@@ -916,15 +937,21 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
   );
 };
 
-// Admin Dashboard View - UPDATED for multi-tournament events
-const AdminDashboardView = ({ eventName, tournamentUrls, tournaments, onEventNameChange, onAddTournament, onRemoveTournament, onRefreshAll, theme }) => {
+// Admin Dashboard View
+const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, onEventIdChange, onEventNameChange, onAddTournament, onRemoveTournament, onRefreshAll, onSaveToServer, onCopyLink, theme }) => {
   const t = themes[theme];
   const [selectedTab, setSelectedTab] = useState('settings');
   const [newTournamentUrl, setNewTournamentUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
+  const [localEventId, setLocalEventId] = useState(eventId);
   const [localEventName, setLocalEventName] = useState(eventName);
   
+  useEffect(() => {
+    setLocalEventId(eventId);
+    setLocalEventName(eventName);
+  }, [eventId, eventName]);
+
   const handleAddTournament = async () => {
     if (!newTournamentUrl.trim()) return;
     setIsLoading(true);
@@ -955,16 +982,38 @@ const AdminDashboardView = ({ eventName, tournamentUrls, tournaments, onEventNam
     }
   };
 
-  const handleEventNameSave = () => {
-    onEventNameChange(localEventName);
-    setSyncStatus({ success: true, message: 'Event name saved!' });
+  const handleSaveEvent = async () => {
+    if (!localEventId.trim()) {
+      setSyncStatus({ success: false, message: 'Event ID is required' });
+      return;
+    }
+    
+    setIsLoading(true);
+    setSyncStatus(null);
+    
+    try {
+      onEventIdChange(localEventId.trim());
+      onEventNameChange(localEventName.trim());
+      await onSaveToServer(localEventId.trim(), localEventName.trim());
+      setSyncStatus({ success: true, message: 'Event saved! Share the link with judges.' });
+    } catch (err) {
+      setSyncStatus({ success: false, message: err.message });
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const handleCopyLink = () => {
+    onCopyLink();
+    setSyncStatus({ success: true, message: 'Link copied to clipboard!' });
+  };
+
+  const shareableLink = localEventId ? `${window.location.origin}${window.location.pathname}?event=${encodeURIComponent(localEventId)}` : '';
   
   return (
     <div className="space-y-4">
-      {/* Tab Navigation */}
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-1 inline-flex gap-1`}>
-        {['settings', 'tournaments', 'judges'].map(tab => (
+        {['settings', 'tournaments', 'share'].map(tab => (
           <button key={tab} onClick={() => setSelectedTab(tab)}
             className={`px-4 py-2 rounded-lg text-sm font-semibold capitalize transition-colors ${
               selectedTab === tab ? 'bg-gray-900 text-white' : `${t.textMuted} hover:${t.text}`
@@ -974,7 +1023,6 @@ const AdminDashboardView = ({ eventName, tournamentUrls, tournaments, onEventNam
         ))}
       </div>
 
-      {/* Status Message */}
       {syncStatus && (
         <div className={`p-4 rounded-lg ${syncStatus.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
           <p className={syncStatus.success ? 'text-green-700' : 'text-red-700'}>{syncStatus.message}</p>
@@ -986,24 +1034,30 @@ const AdminDashboardView = ({ eventName, tournamentUrls, tournaments, onEventNam
           <h3 className={`font-bold ${t.text}`}>Event Configuration</h3>
           
           <div>
-            <label className={`block text-sm font-medium ${t.textMuted} mb-1`}>Event Name</label>
-            <div className="flex gap-2">
-              <input 
-                type="text" 
-                value={localEventName}
-                onChange={(e) => setLocalEventName(e.target.value)}
-                placeholder="e.g., Texas Cup 2025"
-                className={`flex-1 px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`} 
-              />
-              <button 
-                onClick={handleEventNameSave}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
-              >
-                Save
-              </button>
-            </div>
+            <label className={`block text-sm font-medium ${t.textMuted} mb-1`}>Event ID (for URL)</label>
+            <input 
+              type="text" 
+              value={localEventId}
+              onChange={(e) => setLocalEventId(e.target.value.replace(/[^a-zA-Z0-9-_]/g, ''))}
+              placeholder="e.g., TexasCup25"
+              className={`w-full px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`} 
+            />
             <p className={`text-xs ${t.textFaint} mt-1`}>
-              This name will display in the header
+              Letters, numbers, dashes, and underscores only. This will be used in the shareable URL.
+            </p>
+          </div>
+
+          <div>
+            <label className={`block text-sm font-medium ${t.textMuted} mb-1`}>Event Display Name</label>
+            <input 
+              type="text" 
+              value={localEventName}
+              onChange={(e) => setLocalEventName(e.target.value)}
+              placeholder="e.g., Texas Cup 2025"
+              className={`w-full px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`} 
+            />
+            <p className={`text-xs ${t.textFaint} mt-1`}>
+              This name will display in the header for everyone
             </p>
           </div>
           
@@ -1037,7 +1091,6 @@ const AdminDashboardView = ({ eventName, tournamentUrls, tournaments, onEventNam
             )}
           </div>
           
-          {/* Add Tournament */}
           <div>
             <label className={`block text-sm font-medium ${t.textMuted} mb-1`}>Add Tournament</label>
             <div className="flex gap-2">
@@ -1061,10 +1114,9 @@ const AdminDashboardView = ({ eventName, tournamentUrls, tournaments, onEventNam
             </p>
           </div>
 
-          {/* Tournament List */}
           {tournamentUrls.length > 0 ? (
             <div className="space-y-2">
-              {tournamentUrls.map((url, index) => {
+              {tournamentUrls.map((url) => {
                 const tourneyData = tournaments.find(t => t.tournament.url === url);
                 return (
                   <div key={url} className={`${t.tableBg} rounded-lg p-4 flex justify-between items-center`}>
@@ -1101,10 +1153,56 @@ const AdminDashboardView = ({ eventName, tournamentUrls, tournaments, onEventNam
         </div>
       )}
       
-      {selectedTab === 'judges' && (
-        <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5`}>
-          <h3 className={`font-bold ${t.text} mb-4`}>Judge Management</h3>
-          <p className={t.textMuted}>Judge management coming soon. For now, judges are identified by their login session.</p>
+      {selectedTab === 'share' && (
+        <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5 space-y-5`}>
+          <h3 className={`font-bold ${t.text}`}>Share Event with Judges</h3>
+          
+          <div className={`${t.tableBg} rounded-lg p-4`}>
+            <p className={`text-sm ${t.textMuted} mb-2`}>
+              Save your event configuration to the server, then share the link with judges. 
+              Everyone with the link will see the same tournaments.
+            </p>
+          </div>
+
+          <button 
+            onClick={handleSaveEvent}
+            disabled={isLoading || !localEventId.trim() || tournamentUrls.length === 0}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading ? 'Saving...' : '💾 Save Event to Server'}
+          </button>
+
+          {localEventId && (
+            <div className="space-y-2">
+              <label className={`block text-sm font-medium ${t.textMuted}`}>Shareable Link</label>
+              <div className="flex gap-2">
+                <input 
+                  type="text" 
+                  value={shareableLink}
+                  readOnly
+                  className={`flex-1 px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} text-sm`}
+                />
+                <button 
+                  onClick={handleCopyLink}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors"
+                >
+                  📋 Copy
+                </button>
+              </div>
+              <p className={`text-xs ${t.textFaint}`}>
+                Share this link with judges - they'll see all tournaments automatically
+              </p>
+            </div>
+          )}
+
+          <div className={`pt-4 border-t ${t.divider}`}>
+            <p className={`text-sm font-medium ${t.textMuted} mb-2`}>Current Configuration</p>
+            <div className={`${t.tableBg} rounded-lg p-3 text-sm`}>
+              <p className={t.text}><strong>Event ID:</strong> {localEventId || '(not set)'}</p>
+              <p className={t.text}><strong>Event Name:</strong> {localEventName || '(not set)'}</p>
+              <p className={t.text}><strong>Tournaments:</strong> {tournamentUrls.length}</p>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1118,46 +1216,50 @@ export default function TournamentJudgingApp() {
   const [currentUser, setCurrentUser] = useState(null);
   const [showJudgeSelect, setShowJudgeSelect] = useState(false);
   
-  // Load dark mode from localStorage
   const [darkMode, setDarkMode] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.DARK_MODE);
     return saved !== null ? JSON.parse(saved) : true;
   });
 
-  // Load event data from localStorage
-  const [eventName, setEventName] = useState(() => {
-    return localStorage.getItem(STORAGE_KEYS.EVENT_NAME) || '';
-  });
-  
-  const [tournamentUrls, setTournamentUrls] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.TOURNAMENTS);
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  // Tournament data state
+  const [eventId, setEventId] = useState('');
+  const [eventName, setEventName] = useState('');
+  const [tournamentUrls, setTournamentUrls] = useState([]);
   const [tournaments, setTournaments] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [eventLoaded, setEventLoaded] = useState(false);
   
   const theme = darkMode ? 'dark' : 'light';
   const t = themes[theme];
 
-  // Save dark mode to localStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.DARK_MODE, JSON.stringify(darkMode));
   }, [darkMode]);
 
-  // Save event name to localStorage
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.EVENT_NAME, eventName);
-  }, [eventName]);
+    const loadEventFromUrl = async () => {
+      const urlEventId = getUrlParam('event');
+      if (urlEventId && !eventLoaded) {
+        setIsLoading(true);
+        try {
+          const eventData = await api.getEvent(urlEventId);
+          if (eventData) {
+            setEventId(eventData.eventId);
+            setEventName(eventData.name || eventData.eventId);
+            setTournamentUrls(eventData.tournaments || []);
+            setEventLoaded(true);
+          }
+        } catch (err) {
+          console.error('Failed to load event from URL:', err);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
 
-  // Save tournament URLs to localStorage
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TOURNAMENTS, JSON.stringify(tournamentUrls));
-  }, [tournamentUrls]);
+    loadEventFromUrl();
+  }, [eventLoaded]);
 
-  // Load all tournaments on mount and when URLs change
   const loadAllTournaments = useCallback(async () => {
     if (tournamentUrls.length === 0) {
       setTournaments([]);
@@ -1188,19 +1290,17 @@ export default function TournamentJudgingApp() {
     }
   }, [tournamentUrls]);
 
-  // Load tournaments on mount
   useEffect(() => {
-    loadAllTournaments();
-  }, [loadAllTournaments]);
+    if (tournamentUrls.length > 0) {
+      loadAllTournaments();
+    }
+  }, [tournamentUrls, loadAllTournaments]);
 
-  // Add a new tournament
   const addTournament = async (url) => {
-    // Check if already exists
     if (tournamentUrls.includes(url)) {
       throw new Error('Tournament already added');
     }
 
-    // Verify it exists by fetching it
     const data = await api.getTournament(url);
     const transformed = transformChallongeData(data, url);
 
@@ -1208,19 +1308,25 @@ export default function TournamentJudgingApp() {
     setTournaments(prev => [...prev, transformed]);
   };
 
-  // Remove a tournament
   const removeTournament = (url) => {
     setTournamentUrls(prev => prev.filter(u => u !== url));
     setTournaments(prev => prev.filter(t => t.tournament.url !== url));
   };
 
-  // Handle score submission
+  const saveToServer = async (id, name) => {
+    await api.saveEvent(id, name, tournamentUrls);
+    setUrlParam('event', id);
+  };
+
+  const copyLink = () => {
+    const link = `${window.location.origin}${window.location.pathname}?event=${encodeURIComponent(eventId)}`;
+    navigator.clipboard.writeText(link);
+  };
+
   const handleScoreSubmitted = useCallback((result) => {
-    // Refresh all tournaments when a match is finalized
     setTimeout(() => loadAllTournaments(), 1000);
   }, [loadAllTournaments]);
 
-  // Predefined judges
   const availableJudges = [
     { id: 'judge_1', name: 'Judge 1' },
     { id: 'judge_2', name: 'Judge 2' },
@@ -1252,7 +1358,6 @@ export default function TournamentJudgingApp() {
   
   return (
     <div className={`min-h-screen ${t.bg} transition-colors`}>
-      {/* Header */}
       <header className={`${t.headerBg} border-b ${t.divider} sticky top-0 z-40`}>
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex justify-between items-center h-14">
@@ -1260,7 +1365,6 @@ export default function TournamentJudgingApp() {
               <a href="#" className={`font-bold ${t.text} text-lg`}>SCAR Judge Portal</a>
             </div>
             
-            {/* Navigation */}
             <nav className="flex items-center gap-1">
               <button onClick={() => { setView('public'); setCurrentUser(null); }}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
@@ -1310,7 +1414,6 @@ export default function TournamentJudgingApp() {
         </div>
       </header>
       
-      {/* Event Info Bar */}
       <div className={`${t.headerBg} border-b ${t.divider}`}>
         <div className="max-w-6xl mx-auto px-4 py-3">
           <div className="flex items-center gap-3">
@@ -1342,7 +1445,6 @@ export default function TournamentJudgingApp() {
         </div>
       </div>
       
-      {/* Main Content */}
       <main className="max-w-6xl mx-auto px-4 py-6">
         {isLoading && (
           <div className={`${t.card} rounded-xl border ${t.cardBorder} p-8 text-center`}>
@@ -1391,7 +1493,6 @@ export default function TournamentJudgingApp() {
         )}
       </main>
       
-      {/* Footer */}
       <footer className={`border-t ${t.divider} ${t.headerBg} mt-auto`}>
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className={`flex flex-col md:flex-row justify-between items-center gap-2 text-sm ${t.textFaint}`}>
@@ -1405,7 +1506,6 @@ export default function TournamentJudgingApp() {
         </div>
       </footer>
 
-      {/* Match Detail Popup */}
       {selectedMatch && (
         <MatchDetailPopup 
           match={selectedMatch}
@@ -1414,156 +1514,6 @@ export default function TournamentJudgingApp() {
         />
       )}
 
-      {/* Judge Selection Modal */}
-      {showJudgeSelect && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowJudgeSelect(false)} />
-          <div className={`relative w-full max-w-sm ${t.card} rounded-2xl border ${t.cardBorder} shadow-2xl overflow-hidden`}>
-            <div className={`px-5 py-4 border-b ${t.divider}`}>
-              <h2 className={`text-lg font-bold ${t.text}`}>Select Your Judge Position</h2>
-              <p className={`text-sm ${t.textMuted} mt-1`}>Choose which judge you are</p>
-            </div>
-            <div className="p-5 space-y-3">
-              {availableJudges.map(judge => (
-                <button
-                  key={judge.id}
-                  onClick={() => handleLogin('judge', judge)}
-                  className={`w-full p-4 rounded-xl border-2 ${t.cardBorder} ${t.hoverBg} transition-all text-left flex items-center gap-4`}
-                >
-                  <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                    <span className="text-xl font-bold text-blue-600">{judge.name.split(' ')[1]}</span>
-                  </div>
-                  <div>
-                    <p className={`font-semibold ${t.text}`}>{judge.name}</p>
-                    <p className={`text-sm ${t.textMuted}`}>Click to login</p>
-                  </div>
-                </button>
-              ))}
-            </div>
-            <div className={`px-5 py-3 border-t ${t.divider} ${t.tableBg}`}>
-              <button
-                onClick={() => setShowJudgeSelect(false)}
-                className={`w-full py-2 rounded-lg border ${t.cardBorder} ${t.text} font-semibold ${t.hoverBg} transition-colors`}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                  </svg>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
-      
-      {/* Event Info Bar */}
-      <div className={`${t.headerBg} border-b ${t.divider}`}>
-        <div className="max-w-6xl mx-auto px-4 py-3">
-          <div className="flex items-center gap-3">
-            {tournaments.length > 0 ? (
-              <>
-                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
-                  {tournaments.length} Tournament{tournaments.length !== 1 ? 's' : ''}
-                </span>
-                <h1 className={`text-lg font-bold ${t.text}`}>
-                  {eventName || 'SCAR Event'}
-                </h1>
-                <span className="px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded">
-                  Connected
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded">
-                  No Tournaments
-                </span>
-                <h1 className={`text-lg font-bold ${t.text}`}>SCAR Tournament Judge Portal</h1>
-                <span className={`text-sm ${t.textMuted}`}>Add tournament URLs in Admin → Tournaments</span>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-      
-      {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-4 py-6">
-        {isLoading && (
-          <div className={`${t.card} rounded-xl border ${t.cardBorder} p-8 text-center`}>
-            <p className={t.text}>Loading tournament data...</p>
-          </div>
-        )}
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
-            <p className="text-red-700">{error}</p>
-          </div>
-        )}
-
-        {!isLoading && view === 'public' && (
-          <PublicBracketView 
-            tournaments={tournaments} 
-            onMatchClick={setSelectedMatch} 
-            theme={theme} 
-          />
-        )}
-        
-        {!isLoading && view === 'judge' && (
-          <JudgeScoringView 
-            tournaments={tournaments}
-            currentUser={currentUser}
-            onScoreSubmitted={handleScoreSubmitted}
-            theme={theme} 
-          />
-        )}
-        
-        {!isLoading && view === 'admin' && (
-          <AdminDashboardView 
-            eventName={eventName}
-            tournamentUrls={tournamentUrls}
-            tournaments={tournaments}
-            onEventNameChange={setEventName}
-            onAddTournament={addTournament}
-            onRemoveTournament={removeTournament}
-            onRefreshAll={loadAllTournaments}
-            theme={theme} 
-          />
-        )}
-      </main>
-      
-      {/* Footer */}
-      <footer className={`border-t ${t.divider} ${t.headerBg} mt-auto`}>
-        <div className="max-w-6xl mx-auto px-4 py-4">
-          <div className={`flex flex-col md:flex-row justify-between items-center gap-2 text-sm ${t.textFaint}`}>
-            <div>Built for <a href="https://www.socalattackrobots.com/" className={t.blueText}>SCAR</a></div>
-            <div className="flex items-center gap-4">
-              <span>{tournaments.length} tournament{tournaments.length !== 1 ? 's' : ''} loaded</span>
-              <span>•</span>
-              <span>Data persists on refresh</span>
-            </div>
-          </div>
-        </div>
-      </footer>
-
-      {/* Match Detail Popup */}
-      {selectedMatch && (
-        <MatchDetailPopup 
-          match={selectedMatch}
-          onClose={() => setSelectedMatch(null)} 
-          theme={theme} 
-        />
-      )}
-
-      {/* Judge Selection Modal */}
       {showJudgeSelect && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowJudgeSelect(false)} />
