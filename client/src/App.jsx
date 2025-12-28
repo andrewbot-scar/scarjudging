@@ -210,6 +210,217 @@ const StatusBadge = ({ status, winMethod, theme }) => {
   return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.decisionBg} ${t.decisionText}`}>Decision</span>;
 };
 
+// Match Detail Popup Component
+const MatchDetailPopup = ({ match, onClose, theme }) => {
+  const t = themes[theme];
+  const [judgeScores, setJudgeScores] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchScores = async () => {
+      if (!match) return;
+      
+      setIsLoading(true);
+      setError(null);
+      
+      try {
+        const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:3001/api'}/matches/${match.challongeId}/scores/details`);
+        if (response.ok) {
+          const data = await response.json();
+          setJudgeScores(data);
+        } else {
+          // No scores yet or endpoint doesn't exist
+          setJudgeScores({ judges: {} });
+        }
+      } catch (err) {
+        setError('Could not load judge scores');
+        setJudgeScores({ judges: {} });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchScores();
+  }, [match]);
+
+  if (!match) return null;
+
+  const judges = judgeScores?.judges ? Object.entries(judgeScores.judges) : [];
+  const hasScores = judges.length > 0;
+
+  // Calculate totals for each judge
+  const getJudgeTotals = (scores) => {
+    if (!scores) return { a: 0, b: 0 };
+    const totalA = (scores.aggression || 0) + (scores.damage || 0) + (scores.control || 0);
+    const totalB = 11 - totalA;
+    return { a: totalA, b: totalB };
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      
+      {/* Modal */}
+      <div className={`relative w-full max-w-lg ${t.card} rounded-2xl border ${t.cardBorder} shadow-2xl overflow-hidden`}>
+        {/* Header */}
+        <div className={`px-5 py-4 border-b ${t.divider} flex justify-between items-center`}>
+          <div>
+            <span className={`text-xs ${t.textFaint} font-mono`}>Match {match.matchNum}</span>
+            <div className="flex items-center gap-2 mt-1">
+              <StatusBadge status={match.status} winMethod={match.winMethod} theme={theme} />
+              {match.winner && (
+                <span className={`text-xs ${t.textMuted}`}>Winner: {match.winner}</span>
+              )}
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className={`p-2 rounded-lg ${t.hoverBg} ${t.textMuted} transition-colors`}
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Competitors */}
+        <div className={`px-5 py-4 border-b ${t.divider}`}>
+          <div className="grid grid-cols-3 items-center gap-4">
+            <div className="text-center">
+              <div className={`w-12 h-12 mx-auto rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center mb-2 ${match.winner === match.competitorA ? 'ring-2 ring-green-500' : ''}`}>
+                <span className="text-lg font-bold text-blue-600">{match.competitorA?.[0] || '?'}</span>
+              </div>
+              <p className={`font-semibold ${t.text} text-sm`}>{match.competitorA || 'TBD'}</p>
+              {match.status === 'completed' && (
+                <p className={`text-xl font-bold ${t.blueText} mt-1`}>{match.scores?.a || 0}</p>
+              )}
+            </div>
+            <div className="text-center">
+              <span className={`${t.textFaint} font-medium`}>vs</span>
+            </div>
+            <div className="text-center">
+              <div className={`w-12 h-12 mx-auto rounded-lg bg-red-100 border border-red-200 flex items-center justify-center mb-2 ${match.winner === match.competitorB ? 'ring-2 ring-green-500' : ''}`}>
+                <span className="text-lg font-bold text-red-600">{match.competitorB?.[0] || '?'}</span>
+              </div>
+              <p className={`font-semibold ${t.text} text-sm`}>{match.competitorB || 'TBD'}</p>
+              {match.status === 'completed' && (
+                <p className={`text-xl font-bold ${t.redText} mt-1`}>{match.scores?.b || 0}</p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Judge Scores */}
+        <div className="px-5 py-4 max-h-80 overflow-y-auto">
+          <h3 className={`text-sm font-semibold ${t.textFaint} uppercase tracking-wide mb-4`}>
+            Judge Scores ({judges.length}/3)
+          </h3>
+
+          {isLoading ? (
+            <div className="text-center py-8">
+              <p className={t.textMuted}>Loading scores...</p>
+            </div>
+          ) : error ? (
+            <div className="text-center py-8">
+              <p className="text-red-500">{error}</p>
+            </div>
+          ) : !hasScores ? (
+            <div className="text-center py-8">
+              <p className={t.textMuted}>No judge scores submitted yet</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {judges.map(([judgeId, judgeData], index) => {
+                const totals = getJudgeTotals(judgeData.scores);
+                return (
+                  <div key={judgeId} className={`${t.tableBg} rounded-lg p-4`}>
+                    <div className="flex justify-between items-center mb-3">
+                      <span className={`font-semibold ${t.text}`}>Judge {index + 1}</span>
+                      {judgeData.isKO ? (
+                        <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">
+                          KO: {judgeData.koWinnerId === match.competitorAId ? match.competitorA : match.competitorB}
+                        </span>
+                      ) : (
+                        <span className={`text-sm ${t.textMuted}`}>
+                          {totals.a} - {totals.b}
+                        </span>
+                      )}
+                    </div>
+                    
+                    {!judgeData.isKO && judgeData.scores && (
+                      <div className="space-y-2">
+                        {/* Aggression */}
+                        <div className="flex items-center justify-between text-sm">
+                          <span className={t.textMuted}>Aggression</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-mono ${t.blueText}`}>{judgeData.scores.aggression}</span>
+                            <div className={`w-16 h-1.5 ${t.sliderBg} rounded-full overflow-hidden`}>
+                              <div 
+                                className="h-full bg-blue-500" 
+                                style={{ width: `${(judgeData.scores.aggression / 3) * 100}%` }}
+                              />
+                            </div>
+                            <span className={`font-mono ${t.redText}`}>{3 - judgeData.scores.aggression}</span>
+                          </div>
+                        </div>
+                        
+                        {/* Damage */}
+                        <div className="flex items-center justify-between text-sm">
+                          <span className={t.textMuted}>Damage</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-mono ${t.blueText}`}>{judgeData.scores.damage}</span>
+                            <div className={`w-16 h-1.5 ${t.sliderBg} rounded-full overflow-hidden`}>
+                              <div 
+                                className="h-full bg-blue-500" 
+                                style={{ width: `${(judgeData.scores.damage / 5) * 100}%` }}
+                              />
+                            </div>
+                            <span className={`font-mono ${t.redText}`}>{5 - judgeData.scores.damage}</span>
+                          </div>
+                        </div>
+                        
+                        {/* Control */}
+                        <div className="flex items-center justify-between text-sm">
+                          <span className={t.textMuted}>Control</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`font-mono ${t.blueText}`}>{judgeData.scores.control}</span>
+                            <div className={`w-16 h-1.5 ${t.sliderBg} rounded-full overflow-hidden`}>
+                              <div 
+                                className="h-full bg-blue-500" 
+                                style={{ width: `${(judgeData.scores.control / 3) * 100}%` }}
+                              />
+                            </div>
+                            <span className={`font-mono ${t.redText}`}>{3 - judgeData.scores.control}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className={`px-5 py-3 border-t ${t.divider} ${t.tableBg}`}>
+          <button
+            onClick={onClose}
+            className={`w-full py-2 rounded-lg border ${t.cardBorder} ${t.text} font-semibold ${t.hoverBg} transition-colors`}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Helper to get placeholder text for undetermined competitors
 const getCompetitorDisplay = (competitor, source, theme) => {
   if (competitor) return { text: competitor, isPlaceholder: false };
@@ -435,7 +646,20 @@ const PublicBracketView = ({ matches, onMatchClick, theme }) => {
 // Judge Scoring View with API Integration
 const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted, theme }) => {
   const t = themes[theme];
-  const activeMatch = matches.find(m => m.status === 'active');
+  
+  // Get matches that can be scored (active or pending with both competitors assigned)
+  const scorableMatches = matches.filter(m => 
+    (m.status === 'active' || m.status === 'pending') && 
+    m.competitorA && 
+    m.competitorB
+  );
+  
+  // State for selected match
+  const [selectedMatchId, setSelectedMatchId] = useState(null);
+  const selectedMatch = selectedMatchId 
+    ? matches.find(m => m.id === selectedMatchId)
+    : scorableMatches.find(m => m.status === 'active') || scorableMatches[0];
+  
   const [scores, setScores] = useState({ aggression: 2, damage: 3, control: 1 });
   const [isKO, setIsKO] = useState(false);
   const [koWinner, setKoWinner] = useState(null);
@@ -447,8 +671,19 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
   const totalA = scores.aggression + scores.damage + scores.control;
   const totalB = 11 - totalA;
 
+  // Reset form when match changes
+  const handleMatchChange = (matchId) => {
+    setSelectedMatchId(matchId);
+    setScores({ aggression: 2, damage: 3, control: 1 });
+    setIsKO(false);
+    setKoWinner(null);
+    setHasSubmitted(false);
+    setSubmitResult(null);
+    setError(null);
+  };
+
   const handleSubmit = async () => {
-    if (!activeMatch || !currentUser) return;
+    if (!selectedMatch || !currentUser) return;
     
     setIsSubmitting(true);
     setError(null);
@@ -457,14 +692,14 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
       const scoreData = {
         judgeId: currentUser.id,
         tournamentId: tournamentId,
-        competitorAId: activeMatch.competitorAId,
-        competitorBId: activeMatch.competitorBId,
+        competitorAId: selectedMatch.competitorAId,
+        competitorBId: selectedMatch.competitorBId,
         scores: isKO ? null : scores,
         isKO: isKO,
-        koWinnerId: isKO ? (koWinner === 'a' ? activeMatch.competitorAId : activeMatch.competitorBId) : null,
+        koWinnerId: isKO ? (koWinner === 'a' ? selectedMatch.competitorAId : selectedMatch.competitorBId) : null,
       };
 
-      const result = await api.submitJudgeScores(activeMatch.challongeId, scoreData);
+      const result = await api.submitJudgeScores(selectedMatch.challongeId, scoreData);
       setSubmitResult(result);
       setHasSubmitted(true);
 
@@ -480,10 +715,10 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
   };
 
   const handleEdit = async () => {
-    if (!activeMatch || !currentUser) return;
+    if (!selectedMatch || !currentUser) return;
 
     try {
-      await api.deleteJudgeScore(activeMatch.challongeId, currentUser.id);
+      await api.deleteJudgeScore(selectedMatch.challongeId, currentUser.id);
       setHasSubmitted(false);
       setSubmitResult(null);
     } catch (err) {
@@ -491,7 +726,7 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
     }
   };
   
-  if (!activeMatch) {
+  if (scorableMatches.length === 0) {
     return (
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-8 text-center`}>
         <div className={`w-16 h-16 mx-auto rounded-full ${t.tableBg} flex items-center justify-center mb-4`}>
@@ -499,14 +734,40 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         </div>
-        <h3 className={`text-lg font-bold ${t.text} mb-2`}>No Active Match</h3>
-        <p className={t.textMuted}>Waiting for the next match to begin...</p>
+        <h3 className={`text-lg font-bold ${t.text} mb-2`}>No Matches Available</h3>
+        <p className={t.textMuted}>No matches are ready for scoring yet.</p>
+      </div>
+    );
+  }
+
+  if (!selectedMatch) {
+    return (
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-8 text-center`}>
+        <h3 className={`text-lg font-bold ${t.text} mb-2`}>Select a Match</h3>
+        <p className={t.textMuted}>Choose a match from the dropdown above to begin scoring.</p>
       </div>
     );
   }
   
   return (
     <div className="max-w-xl mx-auto space-y-4">
+      {/* Match Selector */}
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-4`}>
+        <label className={`block text-sm font-medium ${t.textMuted} mb-2`}>Select Match to Score</label>
+        <select
+          value={selectedMatch?.id || ''}
+          onChange={(e) => handleMatchChange(e.target.value)}
+          className={`w-full px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+        >
+          {scorableMatches.map(match => (
+            <option key={match.id} value={match.id}>
+              Match {match.matchNum}: {match.competitorA} vs {match.competitorB}
+              {match.status === 'active' ? ' (Live)' : ''}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Error Display */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-center">
@@ -529,9 +790,9 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5`}>
         <div className="flex justify-between items-start mb-4">
           <div>
-            <span className={`text-xs ${t.textFaint} font-mono`}>Match {activeMatch.matchNum}</span>
+            <span className={`text-xs ${t.textFaint} font-mono`}>Match {selectedMatch.matchNum}</span>
             <div className="mt-1">
-              <StatusBadge status="active" theme={theme} />
+              <StatusBadge status={selectedMatch.status} theme={theme} />
             </div>
           </div>
           <div className="text-right">
@@ -549,9 +810,9 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
         <div className="grid grid-cols-3 items-center gap-4">
           <div className="text-center">
             <div className="w-14 h-14 mx-auto rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center mb-2">
-              <span className="text-xl font-bold text-blue-600">{activeMatch.competitorA?.[0] || '?'}</span>
+              <span className="text-xl font-bold text-blue-600">{selectedMatch.competitorA?.[0] || '?'}</span>
             </div>
-            <p className={`font-semibold ${t.text} text-sm`}>{activeMatch.competitorA || 'TBD'}</p>
+            <p className={`font-semibold ${t.text} text-sm`}>{selectedMatch.competitorA || 'TBD'}</p>
             <p className={`text-2xl font-bold ${t.blueText} mt-1`}>{isKO ? '—' : totalA}</p>
           </div>
           <div className="text-center">
@@ -559,9 +820,9 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
           </div>
           <div className="text-center">
             <div className="w-14 h-14 mx-auto rounded-lg bg-red-100 border border-red-200 flex items-center justify-center mb-2">
-              <span className="text-xl font-bold text-red-600">{activeMatch.competitorB?.[0] || '?'}</span>
+              <span className="text-xl font-bold text-red-600">{selectedMatch.competitorB?.[0] || '?'}</span>
             </div>
-            <p className={`font-semibold ${t.text} text-sm`}>{activeMatch.competitorB || 'TBD'}</p>
+            <p className={`font-semibold ${t.text} text-sm`}>{selectedMatch.competitorB || 'TBD'}</p>
             <p className={`text-2xl font-bold ${t.redText} mt-1`}>{isKO ? '—' : totalB}</p>
           </div>
         </div>
@@ -612,13 +873,13 @@ const JudgeScoringView = ({ matches, tournamentId, currentUser, onScoreSubmitted
                 className={`p-3 rounded-lg border-2 font-semibold transition-all ${
                   koWinner === 'a' ? 'bg-blue-50 border-blue-500 text-blue-700' : `${t.card} ${t.cardBorder} ${t.text}`
                 }`}>
-                {activeMatch.competitorA}
+                {selectedMatch.competitorA}
               </button>
               <button onClick={() => setKoWinner('b')} disabled={hasSubmitted}
                 className={`p-3 rounded-lg border-2 font-semibold transition-all ${
                   koWinner === 'b' ? 'bg-red-50 border-red-500 text-red-700' : `${t.card} ${t.cardBorder} ${t.text}`
                 }`}>
-                {activeMatch.competitorB}
+                {selectedMatch.competitorB}
               </button>
             </div>
           )}
@@ -954,6 +1215,15 @@ export default function TournamentJudgingApp() {
           </div>
         </div>
       </footer>
+
+      {/* Match Detail Popup */}
+      {selectedMatch && (
+        <MatchDetailPopup 
+          match={selectedMatch} 
+          onClose={() => setSelectedMatch(null)} 
+          theme={theme} 
+        />
+      )}
     </div>
   );
 }
