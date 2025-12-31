@@ -8,6 +8,13 @@ const STORAGE_KEYS = {
   DARK_MODE: 'scar_dark_mode',
 };
 
+// Default scoring criteria
+const DEFAULT_SCORING_CRITERIA = [
+  { id: 'aggression', name: 'Aggression', points: 3 },
+  { id: 'damage', name: 'Damage', points: 5 },
+  { id: 'control', name: 'Control', points: 3 },
+];
+
 // Helper to get URL parameters
 function getUrlParam(param) {
   const urlParams = new URLSearchParams(window.location.search);
@@ -67,11 +74,11 @@ const api = {
     return response.json();
   },
 
-  async saveEvent(eventId, name, tournaments) {
+  async saveEvent(eventId, name, tournaments, scoringCriteria) {
     const response = await fetch(`${API_BASE_URL}/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId, name, tournaments }),
+      body: JSON.stringify({ eventId, name, tournaments, scoringCriteria }),
     });
     if (!response.ok) throw new Error('Failed to save event');
     return response.json();
@@ -650,9 +657,131 @@ const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
   );
 };
 
-// Judge Scoring View
-const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme }) => {
+// Completed Matches View
+const CompletedMatchesView = ({ tournaments, onMatchClick, theme }) => {
   const t = themes[theme];
+  
+  // Get all completed matches from all tournaments
+  const allCompletedMatches = tournaments.flatMap(tourney => 
+    (tourney.matches || []).filter(m => m.status === 'completed')
+  );
+
+  // Sort by most recent (highest match number first, assuming higher = more recent)
+  const sortedMatches = [...allCompletedMatches].sort((a, b) => {
+    // Sort by tournament first, then by match number descending
+    if (a.tournamentName !== b.tournamentName) {
+      return a.tournamentName.localeCompare(b.tournamentName);
+    }
+    return b.matchNum - a.matchNum;
+  });
+
+  if (sortedMatches.length === 0) {
+    return (
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-6 sm:p-8 text-center`}>
+        <div className={`w-16 h-16 mx-auto rounded-full ${t.tableBg} flex items-center justify-center mb-4`}>
+          <svg className={`w-8 h-8 ${t.textFaint}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+          </svg>
+        </div>
+        <h3 className={`text-lg font-bold ${t.text} mb-2`}>No Completed Matches Yet</h3>
+        <p className={t.textMuted}>Matches will appear here once they've been judged.</p>
+      </div>
+    );
+  }
+
+  // Group matches by tournament
+  const matchesByTournament = sortedMatches.reduce((acc, match) => {
+    if (!acc[match.tournamentName]) acc[match.tournamentName] = [];
+    acc[match.tournamentName].push(match);
+    return acc;
+  }, {});
+
+  return (
+    <div className="space-y-4 sm:space-y-6">
+      {/* Summary Stats */}
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-4 sm:p-5`}>
+        <div className="grid grid-cols-3 gap-4 text-center">
+          <div>
+            <p className={`text-2xl sm:text-3xl font-bold ${t.text}`}>{sortedMatches.length}</p>
+            <p className={`text-xs sm:text-sm ${t.textMuted}`}>Completed</p>
+          </div>
+          <div>
+            <p className={`text-2xl sm:text-3xl font-bold ${t.blueText}`}>
+              {sortedMatches.filter(m => m.winMethod === 'ko').length}
+            </p>
+            <p className={`text-xs sm:text-sm ${t.textMuted}`}>KOs</p>
+          </div>
+          <div>
+            <p className={`text-2xl sm:text-3xl font-bold ${t.text}`}>
+              {sortedMatches.filter(m => m.winMethod !== 'ko').length}
+            </p>
+            <p className={`text-xs sm:text-sm ${t.textMuted}`}>Decisions</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Matches List by Tournament */}
+      {Object.entries(matchesByTournament).map(([tournamentName, matches]) => (
+        <div key={tournamentName} className={`${t.card} rounded-xl border ${t.cardBorder} overflow-hidden`}>
+          <div className={`px-4 sm:px-5 py-3 border-b ${t.divider} ${t.tableBg}`}>
+            <h2 className={`font-bold ${t.text} text-sm sm:text-base`}>{tournamentName}</h2>
+            <p className={`text-xs ${t.textMuted}`}>{matches.length} completed match{matches.length !== 1 ? 'es' : ''}</p>
+          </div>
+          
+          <div className="divide-y divide-gray-200 dark:divide-gray-700">
+            {matches.map(match => (
+              <div 
+                key={match.id}
+                onClick={() => onMatchClick(match)}
+                className={`px-4 sm:px-5 py-3 ${t.hoverBg} cursor-pointer transition-colors`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <span className={`text-xs ${t.textFaint} font-mono flex-shrink-0`}>M{match.matchNum}</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`font-semibold ${match.winner === match.competitorA ? t.winnerText : t.text} text-sm truncate`}>
+                          {match.competitorA}
+                          {match.winner === match.competitorA && ' ✓'}
+                        </span>
+                        <span className={`text-xs ${t.textFaint}`}>vs</span>
+                        <span className={`font-semibold ${match.winner === match.competitorB ? t.winnerText : t.text} text-sm truncate`}>
+                          {match.competitorB}
+                          {match.winner === match.competitorB && ' ✓'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                    {match.winMethod === 'ko' ? (
+                      <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.koBg} ${t.koText}`}>KO</span>
+                    ) : (
+                      <span className={`text-sm font-mono ${t.textMuted}`}>
+                        {match.scores?.a}-{match.scores?.b}
+                      </span>
+                    )}
+                    <svg className={`w-4 h-4 ${t.textFaint}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Judge Scoring View
+const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringCriteria, theme }) => {
+  const t = themes[theme];
+  
+  // Use provided criteria or default
+  const criteria = scoringCriteria || DEFAULT_SCORING_CRITERIA;
+  const totalMaxPoints = criteria.reduce((sum, c) => sum + c.points, 0);
   
   const allScorableMatches = tournaments.flatMap(tourney => 
     (tourney.matches || []).filter(m => 
@@ -680,7 +809,16 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
     ? sortedMatches.find(m => `${m.tournamentUrl}-${m.id}` === selectedMatchKey) || sortedMatches[0]
     : sortedMatches[0];
   
-  const [scores, setScores] = useState({ aggression: 2, damage: 3, control: 1 });
+  // Initialize scores based on criteria (start at middle value)
+  const initializeScores = () => {
+    const initialScores = {};
+    criteria.forEach(c => {
+      initialScores[c.id] = Math.floor(c.points / 2);
+    });
+    return initialScores;
+  };
+  
+  const [scores, setScores] = useState(initializeScores);
   const [isKO, setIsKO] = useState(false);
   const [koWinner, setKoWinner] = useState(null);
   const [hasSubmitted, setHasSubmitted] = useState(false);
@@ -688,12 +826,13 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
   const [submitResult, setSubmitResult] = useState(null);
   const [error, setError] = useState(null);
   
-  const totalA = scores.aggression + scores.damage + scores.control;
-  const totalB = 11 - totalA;
+  // Calculate totals dynamically
+  const totalA = criteria.reduce((sum, c) => sum + (scores[c.id] || 0), 0);
+  const totalB = totalMaxPoints - totalA;
 
   const handleMatchChange = (matchKey) => {
     setSelectedMatchKey(matchKey);
-    setScores({ aggression: 2, damage: 3, control: 1 });
+    setScores(initializeScores());
     setIsKO(false);
     setKoWinner(null);
     setHasSubmitted(false);
@@ -861,19 +1000,24 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
         <div className={`${t.card} rounded-xl border ${t.cardBorder} p-4 sm:p-5`}>
           <h3 className={`text-sm font-semibold ${t.textFaint} uppercase tracking-wide mb-4`}>Split Points</h3>
           
-          <SplitSlider label="Aggression" maxPoints={3} valueA={scores.aggression}
-            onChange={(val) => setScores(s => ({ ...s, aggression: val }))} disabled={hasSubmitted} theme={theme} />
-          <SplitSlider label="Damage" maxPoints={5} valueA={scores.damage}
-            onChange={(val) => setScores(s => ({ ...s, damage: val }))} disabled={hasSubmitted} theme={theme} />
-          <SplitSlider label="Control" maxPoints={3} valueA={scores.control}
-            onChange={(val) => setScores(s => ({ ...s, control: val }))} disabled={hasSubmitted} theme={theme} />
+          {criteria.map(criterion => (
+            <SplitSlider 
+              key={criterion.id}
+              label={criterion.name} 
+              maxPoints={criterion.points} 
+              valueA={scores[criterion.id] || 0}
+              onChange={(val) => setScores(s => ({ ...s, [criterion.id]: val }))} 
+              disabled={hasSubmitted} 
+              theme={theme} 
+            />
+          ))}
           
           <div className={`flex justify-between items-center pt-4 mt-4 border-t ${t.divider}`}>
             <div className="text-center">
               <p className={`text-xs ${t.textFaint} mb-1`}>Total</p>
               <p className={`text-2xl sm:text-3xl font-bold ${t.blueText}`}>{totalA}</p>
             </div>
-            <div className={`text-xs ${t.textFaint}`}>of 11</div>
+            <div className={`text-xs ${t.textFaint}`}>of {totalMaxPoints}</div>
             <div className="text-center">
               <p className={`text-xs ${t.textFaint} mb-1`}>Total</p>
               <p className={`text-2xl sm:text-3xl font-bold ${t.redText}`}>{totalB}</p>
@@ -939,7 +1083,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, theme })
 };
 
 // Admin Dashboard View
-const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, onEventIdChange, onEventNameChange, onAddTournament, onRemoveTournament, onRefreshAll, onSaveToServer, onCopyLink, theme }) => {
+const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, scoringCriteria, onEventIdChange, onEventNameChange, onAddTournament, onRemoveTournament, onRefreshAll, onSaveToServer, onCopyLink, onScoringCriteriaChange, theme }) => {
   const t = themes[theme];
   const [selectedTab, setSelectedTab] = useState('settings');
   const [newTournamentUrl, setNewTournamentUrl] = useState('');
@@ -947,11 +1091,37 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, o
   const [syncStatus, setSyncStatus] = useState(null);
   const [localEventId, setLocalEventId] = useState(eventId);
   const [localEventName, setLocalEventName] = useState(eventName);
+  const [localCriteria, setLocalCriteria] = useState(scoringCriteria);
   
   useEffect(() => {
     setLocalEventId(eventId);
     setLocalEventName(eventName);
-  }, [eventId, eventName]);
+    setLocalCriteria(scoringCriteria);
+  }, [eventId, eventName, scoringCriteria]);
+
+  const updateCriterion = (index, field, value) => {
+    const updated = [...localCriteria];
+    if (field === 'points') {
+      const numValue = parseInt(value) || 0;
+      updated[index] = { ...updated[index], [field]: Math.max(1, Math.min(10, numValue)) };
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
+    }
+    setLocalCriteria(updated);
+  };
+
+  const addCriterion = () => {
+    if (localCriteria.length >= 6) return; // Max 6 criteria
+    const newId = `criterion_${Date.now()}`;
+    setLocalCriteria([...localCriteria, { id: newId, name: 'New Category', points: 3 }]);
+  };
+
+  const removeCriterion = (index) => {
+    if (localCriteria.length <= 1) return; // Min 1 criterion
+    setLocalCriteria(localCriteria.filter((_, i) => i !== index));
+  };
+
+  const totalPoints = localCriteria.reduce((sum, c) => sum + c.points, 0);
 
   const handleAddTournament = async () => {
     if (!newTournamentUrl.trim()) return;
@@ -995,6 +1165,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, o
     try {
       onEventIdChange(localEventId.trim());
       onEventNameChange(localEventName.trim());
+      onScoringCriteriaChange(localCriteria);
       await onSaveToServer(localEventId.trim(), localEventName.trim());
       setSyncStatus({ success: true, message: 'Event saved! Share the link with judges.' });
     } catch (err) {
@@ -1063,16 +1234,58 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, o
           </div>
           
           <div className={`pt-4 border-t ${t.divider}`}>
-            <p className={`text-sm font-medium ${t.textMuted} mb-3`}>Scoring Criteria (Fixed)</p>
-            <div className="grid grid-cols-3 gap-3">
-              {[{ name: 'Aggression', points: 3 }, { name: 'Damage', points: 5 }, { name: 'Control', points: 3 }].map(c => (
-                <div key={c.name} className={`${t.tableBg} rounded-lg p-3 text-center`}>
-                  <p className={`text-sm font-medium ${t.textMuted}`}>{c.name}</p>
-                  <p className={`text-2xl font-bold ${t.blueText}`}>{c.points}</p>
-                  <p className={`text-xs ${t.textFaint}`}>points</p>
+            <div className="flex justify-between items-center mb-3">
+              <p className={`text-sm font-medium ${t.textMuted}`}>Scoring Criteria</p>
+              <div className="flex items-center gap-2">
+                <span className={`text-xs ${t.textFaint}`}>Total: {totalPoints} pts</span>
+                {localCriteria.length < 6 && (
+                  <button
+                    onClick={addCriterion}
+                    className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors"
+                  >
+                    + Add
+                  </button>
+                )}
+              </div>
+            </div>
+            <div className="space-y-2">
+              {localCriteria.map((criterion, index) => (
+                <div key={criterion.id} className={`${t.tableBg} rounded-lg p-3 flex items-center gap-3`}>
+                  <input
+                    type="text"
+                    value={criterion.name}
+                    onChange={(e) => updateCriterion(index, 'name', e.target.value)}
+                    placeholder="Category name"
+                    className={`flex-1 px-2 py-1 rounded border ${t.inputBorder} ${t.inputBg} ${t.text} text-sm`}
+                  />
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="1"
+                      max="10"
+                      value={criterion.points}
+                      onChange={(e) => updateCriterion(index, 'points', e.target.value)}
+                      className={`w-14 px-2 py-1 rounded border ${t.inputBorder} ${t.inputBg} ${t.text} text-sm text-center`}
+                    />
+                    <span className={`text-xs ${t.textFaint}`}>pts</span>
+                  </div>
+                  {localCriteria.length > 1 && (
+                    <button
+                      onClick={() => removeCriterion(index)}
+                      className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"
+                      title="Remove category"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
+            <p className={`text-xs ${t.textFaint} mt-2`}>
+              Points are split between competitors for each category. Save the event to apply changes.
+            </p>
           </div>
         </div>
       )}
@@ -1156,12 +1369,11 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, o
       
       {selectedTab === 'share' && (
         <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5 space-y-5`}>
-          <h3 className={`font-bold ${t.text}`}>Share Event with Judges</h3>
+          <h3 className={`font-bold ${t.text}`}>Share Event</h3>
           
           <div className={`${t.tableBg} rounded-lg p-4`}>
             <p className={`text-sm ${t.textMuted} mb-2`}>
-              Save your event configuration to the server, then share the link with judges. 
-              Everyone with the link will see the same tournaments.
+              Save your event configuration to the server, then share the appropriate link.
             </p>
           </div>
 
@@ -1174,26 +1386,54 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, o
           </button>
 
           {localEventId && (
-            <div className="space-y-2">
-              <label className={`block text-sm font-medium ${t.textMuted}`}>Shareable Link</label>
-              <div className="flex gap-2">
-                <input 
-                  type="text" 
-                  value={shareableLink}
-                  readOnly
-                  className={`flex-1 px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} text-sm`}
-                />
-                <button 
-                  onClick={handleCopyLink}
-                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors"
-                >
-                  📋 Copy
-                </button>
+            <>
+              {/* Judge Link */}
+              <div className="space-y-2">
+                <label className={`block text-sm font-medium ${t.textMuted}`}>🎯 Judge Link</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={shareableLink}
+                    readOnly
+                    className={`flex-1 px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} text-sm`}
+                  />
+                  <button 
+                    onClick={handleCopyLink}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors"
+                  >
+                    📋 Copy
+                  </button>
+                </div>
+                <p className={`text-xs ${t.textFaint}`}>
+                  For judges - shows Bracket, Completed, and Judge tabs
+                </p>
               </div>
-              <p className={`text-xs ${t.textFaint}`}>
-                Share this link with judges - they'll see all tournaments automatically
-              </p>
-            </div>
+
+              {/* Spectator Link */}
+              <div className="space-y-2">
+                <label className={`block text-sm font-medium ${t.textMuted}`}>👀 Spectator Link</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={`${shareableLink}&spectator=true`}
+                    readOnly
+                    className={`flex-1 px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} text-sm`}
+                  />
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${shareableLink}&spectator=true`);
+                      setSyncStatus({ success: true, message: 'Spectator link copied!' });
+                    }}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold transition-colors"
+                  >
+                    📋 Copy
+                  </button>
+                </div>
+                <p className={`text-xs ${t.textFaint}`}>
+                  For competitors & audience - shows Bracket and Completed only (no Judge tab)
+                </p>
+              </div>
+            </>
           )}
 
           <div className={`pt-4 border-t ${t.divider}`}>
@@ -1226,12 +1466,15 @@ export default function TournamentJudgingApp() {
   const [eventName, setEventName] = useState('');
   const [tournamentUrls, setTournamentUrls] = useState([]);
   const [tournaments, setTournaments] = useState([]);
+  const [scoringCriteria, setScoringCriteria] = useState(DEFAULT_SCORING_CRITERIA);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [eventLoaded, setEventLoaded] = useState(false);
   
   // Check if viewing via shared link (hides admin)
   const isSharedView = Boolean(getUrlParam('event'));
+  // Check if spectator mode (hides judge tab too)
+  const isSpectatorView = getUrlParam('spectator') === 'true' || getUrlParam('view') === 'spectator';
   
   const theme = darkMode ? 'dark' : 'light';
   const t = themes[theme];
@@ -1251,6 +1494,7 @@ export default function TournamentJudgingApp() {
             setEventId(eventData.eventId);
             setEventName(eventData.name || eventData.eventId);
             setTournamentUrls(eventData.tournaments || []);
+            setScoringCriteria(eventData.scoringCriteria || DEFAULT_SCORING_CRITERIA);
             setEventLoaded(true);
           }
         } catch (err) {
@@ -1318,7 +1562,7 @@ export default function TournamentJudgingApp() {
   };
 
   const saveToServer = async (id, name) => {
-    await api.saveEvent(id, name, tournamentUrls);
+    await api.saveEvent(id, name, tournamentUrls, scoringCriteria);
     setUrlParam('event', id);
   };
 
@@ -1377,12 +1621,20 @@ export default function TournamentJudgingApp() {
                 }`}>
                 Bracket
               </button>
-              <button onClick={() => handleLogin('judge')}
+              <button onClick={() => setView('completed')}
                 className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  view === 'judge' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  view === 'completed' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
                 }`}>
-                Judge
+                Completed
               </button>
+              {!isSpectatorView && (
+                <button onClick={() => handleLogin('judge')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    view === 'judge' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  }`}>
+                  Judge
+                </button>
+              )}
               {!isSharedView && (
                 <button onClick={() => handleLogin('admin')}
                   className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
@@ -1401,12 +1653,20 @@ export default function TournamentJudgingApp() {
                 }`}>
                 Bracket
               </button>
-              <button onClick={() => handleLogin('judge')}
+              <button onClick={() => setView('completed')}
                 className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                  view === 'judge' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  view === 'completed' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
                 }`}>
-                Judge
+                Done
               </button>
+              {!isSpectatorView && (
+                <button onClick={() => handleLogin('judge')}
+                  className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    view === 'judge' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  }`}>
+                  Judge
+                </button>
+              )}
               {!isSharedView && (
                 <button onClick={() => handleLogin('admin')}
                   className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
@@ -1499,12 +1759,21 @@ export default function TournamentJudgingApp() {
             theme={theme} 
           />
         )}
+
+        {!isLoading && view === 'completed' && (
+          <CompletedMatchesView 
+            tournaments={tournaments} 
+            onMatchClick={setSelectedMatch} 
+            theme={theme} 
+          />
+        )}
         
         {!isLoading && view === 'judge' && (
           <JudgeScoringView 
             tournaments={tournaments}
             currentUser={currentUser}
             onScoreSubmitted={handleScoreSubmitted}
+            scoringCriteria={scoringCriteria}
             theme={theme} 
           />
         )}
@@ -1515,6 +1784,7 @@ export default function TournamentJudgingApp() {
             eventName={eventName}
             tournamentUrls={tournamentUrls}
             tournaments={tournaments}
+            scoringCriteria={scoringCriteria}
             onEventIdChange={setEventId}
             onEventNameChange={setEventName}
             onAddTournament={addTournament}
@@ -1522,6 +1792,7 @@ export default function TournamentJudgingApp() {
             onRefreshAll={loadAllTournaments}
             onSaveToServer={saveToServer}
             onCopyLink={copyLink}
+            onScoringCriteriaChange={setScoringCriteria}
             theme={theme} 
           />
         )}
