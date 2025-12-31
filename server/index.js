@@ -39,10 +39,22 @@ async function initDatabase() {
         event_id VARCHAR(255) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
         tournaments JSONB NOT NULL DEFAULT '[]',
+        scoring_criteria JSONB,
+        robot_images JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Add scoring_criteria column if it doesn't exist (for existing databases)
+    await pool.query(`
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS scoring_criteria JSONB
+    `).catch(() => {});
+
+    // Add robot_images column if it doesn't exist (for existing databases)
+    await pool.query(`
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS robot_images JSONB
+    `).catch(() => {});
 
     // Create judge_scores table for persistent score storage
     await pool.query(`
@@ -120,7 +132,7 @@ const memoryStorage = {
 // POST /api/events - Create or update an event
 app.post('/api/events', async (req, res) => {
   try {
-    const { eventId, name, tournaments } = req.body;
+    const { eventId, name, tournaments, scoringCriteria, robotImages } = req.body;
 
     if (!eventId) {
       return res.status(400).json({ error: 'eventId is required' });
@@ -135,11 +147,11 @@ app.post('/api/events', async (req, res) => {
     if (pool) {
       // Use PostgreSQL
       await pool.query(`
-        INSERT INTO events (event_id, name, tournaments, updated_at)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO events (event_id, name, tournaments, scoring_criteria, robot_images, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6)
         ON CONFLICT (event_id) 
-        DO UPDATE SET name = $2, tournaments = $3, updated_at = $4
-      `, [eventId, name || eventId, JSON.stringify(tournaments), now]);
+        DO UPDATE SET name = $2, tournaments = $3, scoring_criteria = $4, robot_images = $5, updated_at = $6
+      `, [eventId, name || eventId, JSON.stringify(tournaments), JSON.stringify(scoringCriteria || null), JSON.stringify(robotImages || null), now]);
 
       console.log(`Event saved to database: ${eventId} with ${tournaments.length} tournaments`);
     } else {
@@ -147,6 +159,8 @@ app.post('/api/events', async (req, res) => {
       memoryStorage.events[eventId] = {
         name: name || eventId,
         tournaments,
+        scoringCriteria: scoringCriteria || null,
+        robotImages: robotImages || null,
         createdAt: memoryStorage.events[eventId]?.createdAt || now,
         updatedAt: now,
       };
@@ -159,6 +173,8 @@ app.post('/api/events', async (req, res) => {
         eventId,
         name: name || eventId,
         tournaments,
+        scoringCriteria: scoringCriteria || null,
+        robotImages: robotImages || null,
         updatedAt: now,
       },
     });
@@ -189,6 +205,8 @@ app.get('/api/events/:eventId', async (req, res) => {
         eventId: row.event_id,
         name: row.name,
         tournaments: row.tournaments,
+        scoringCriteria: row.scoring_criteria || null,
+        robotImages: row.robot_images || null,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       });
@@ -266,6 +284,89 @@ app.delete('/api/events/:eventId', async (req, res) => {
     res.json({ success: true, message: `Event ${eventId} deleted` });
   } catch (error) {
     console.error('Error deleting event:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// ROBOT COMBAT EVENTS IMAGE SCRAPING
+// ============================================
+
+// GET /api/scrape-rce - Scrape robot images from RobotCombatEvents registration page
+app.get('/api/scrape-rce', async (req, res) => {
+  try {
+    const { url } = req.query;
+    
+    if (!url || !url.includes('robotcombatevents.com')) {
+      return res.status(400).json({ error: 'Valid RobotCombatEvents URL required' });
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch RCE page: ${response.status}`);
+    }
+
+    const html = await response.text();
+    
+    // Parse the HTML to extract robot data
+    const robots = [];
+    
+    // Find all table rows with robot data
+    // The table has: Image | Bot Name (link) | Team | Status
+    // We need to extract the image and the bot name
+    
+    // Pattern to match each robot entry
+    // Looking for: <td> with image, then <td> with link to /groups/X/resources/Y containing name
+    const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    const rows = html.match(rowRegex) || [];
+    
+    for (const row of rows) {
+      // Skip header rows
+      if (row.includes('<th')) continue;
+      
+      // Try to find resource link
+      const resourceMatch = row.match(/href="\/groups\/(\d+)\/resources\/(\d+)"[^>]*>([^<]+)<\/a>/i);
+      if (!resourceMatch) continue;
+      
+      const [, groupId, resourceId, robotName] = resourceMatch;
+      
+      // Try to find image - look for img tag with src
+      const imgMatch = row.match(/<img[^>]*src="([^"]+)"[^>]*>/i);
+      let imageUrl = null;
+      
+      if (imgMatch) {
+        let imgSrc = imgMatch[1];
+        
+        // Skip RCE logo placeholders
+        if (imgSrc.toLowerCase().includes('rcelogo') || imgSrc.toLowerCase().includes('rce_logo')) {
+          imageUrl = null;
+        } else if (imgSrc.startsWith('http')) {
+          imageUrl = imgSrc;
+        } else if (imgSrc.startsWith('/')) {
+          // Relative URL - these are usually thumbnails served by RCE
+          // The actual S3 images follow a pattern based on resource ID
+          imageUrl = `https://www.robotcombatevents.com${imgSrc}`;
+        }
+      }
+      
+      robots.push({
+        name: robotName.trim(),
+        resourceId,
+        groupId,
+        imageUrl,
+      });
+    }
+
+    console.log(`Scraped ${robots.length} robots from RCE: ${url}`);
+    
+    res.json({
+      success: true,
+      url,
+      robotCount: robots.length,
+      robots,
+    });
+  } catch (error) {
+    console.error('Error scraping RCE:', error);
     res.status(500).json({ error: error.message });
   }
 });
