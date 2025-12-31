@@ -343,7 +343,7 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
         <div className={`px-5 py-4 border-b ${t.divider}`}>
           <div className="grid grid-cols-3 items-center gap-4">
             <div className="text-center">
-              <div className={`w-14 h-14 mx-auto rounded-lg overflow-hidden mb-2 ${match.winner === match.competitorA ? 'ring-2 ring-green-500' : ''}`}>
+              <div className={`w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-lg overflow-hidden mb-2 ${match.winner === match.competitorA ? 'ring-2 ring-green-500' : ''}`}>
                 {robotImages?.[match.competitorA] ? (
                   <img 
                     src={robotImages[match.competitorA]} 
@@ -356,7 +356,7 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
                   />
                 ) : null}
                 <div className={`w-full h-full bg-blue-100 border border-blue-200 items-center justify-center ${robotImages?.[match.competitorA] ? 'hidden' : 'flex'}`}>
-                  <span className="text-lg font-bold text-blue-600">{match.competitorA?.[0] || '?'}</span>
+                  <span className="text-2xl sm:text-3xl font-bold text-blue-600">{match.competitorA?.[0] || '?'}</span>
                 </div>
               </div>
               <p className={`font-semibold ${t.text} text-sm`}>{match.competitorA || 'TBD'}</p>
@@ -368,7 +368,7 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
               <span className={`${t.textFaint} font-medium`}>vs</span>
             </div>
             <div className="text-center">
-              <div className={`w-14 h-14 mx-auto rounded-lg overflow-hidden mb-2 ${match.winner === match.competitorB ? 'ring-2 ring-green-500' : ''}`}>
+              <div className={`w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-lg overflow-hidden mb-2 ${match.winner === match.competitorB ? 'ring-2 ring-green-500' : ''}`}>
                 {robotImages?.[match.competitorB] ? (
                   <img 
                     src={robotImages[match.competitorB]} 
@@ -381,7 +381,7 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
                   />
                 ) : null}
                 <div className={`w-full h-full bg-red-100 border border-red-200 items-center justify-center ${robotImages?.[match.competitorB] ? 'hidden' : 'flex'}`}>
-                  <span className="text-lg font-bold text-red-600">{match.competitorB?.[0] || '?'}</span>
+                  <span className="text-2xl sm:text-3xl font-bold text-red-600">{match.competitorB?.[0] || '?'}</span>
                 </div>
               </div>
               <p className={`font-semibold ${t.text} text-sm`}>{match.competitorB || 'TBD'}</p>
@@ -472,7 +472,8 @@ const RobotAvatar = ({ name, robotImages, size = 'md', colorClass = 'bg-gray-100
   const sizeClasses = {
     sm: 'w-8 h-8 text-sm',
     md: 'w-12 h-12 text-lg',
-    lg: 'w-14 h-14 text-xl',
+    lg: 'w-20 h-20 sm:w-24 sm:h-24 text-2xl sm:text-3xl',
+    xl: 'w-24 h-24 sm:w-28 sm:h-28 text-3xl sm:text-4xl',
   };
   
   if (imageUrl) {
@@ -818,8 +819,8 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
                   
                   {/* Robot images */}
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <RobotAvatar name={match.competitorA} robotImages={robotImages} size="sm" colorClass="bg-blue-100 text-blue-600" />
-                    <RobotAvatar name={match.competitorB} robotImages={robotImages} size="sm" colorClass="bg-red-100 text-red-600" />
+                    <RobotAvatar name={match.competitorA} robotImages={robotImages} size="md" colorClass="bg-blue-100 text-blue-600" />
+                    <RobotAvatar name={match.competitorB} robotImages={robotImages} size="md" colorClass="bg-red-100 text-red-600" />
                   </div>
                   
                   <div className="min-w-0 flex-1">
@@ -1071,7 +1072,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringC
         
         <div className="grid grid-cols-3 items-center gap-2 sm:gap-4">
           <div className="text-center">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto rounded-lg overflow-hidden mb-1 sm:mb-2">
+            <div className="w-24 h-24 sm:w-28 sm:h-28 mx-auto rounded-lg overflow-hidden mb-1 sm:mb-2">
               {robotImages?.[selectedMatch.competitorA] ? (
                 <img 
                   src={robotImages[selectedMatch.competitorA]} 
@@ -1084,7 +1085,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringC
                 />
               ) : null}
               <div className={`w-full h-full bg-blue-100 border border-blue-200 items-center justify-center ${robotImages?.[selectedMatch.competitorA] ? 'hidden' : 'flex'}`}>
-                <span className="text-lg sm:text-xl font-bold text-blue-600">{selectedMatch.competitorA?.[0] || '?'}</span>
+                <span className="text-3xl sm:text-4xl font-bold text-blue-600">{selectedMatch.competitorA?.[0] || '?'}</span>
               </div>
             </div>
             <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorA || 'TBD'}</p>
@@ -1094,7 +1095,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringC
             <span className={`${t.textFaint} font-medium text-sm`}>vs</span>
           </div>
           <div className="text-center">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto rounded-lg overflow-hidden mb-1 sm:mb-2">
+            <div className="w-24 h-24 sm:w-28 sm:h-28 mx-auto rounded-lg overflow-hidden mb-1 sm:mb-2">
               {robotImages?.[selectedMatch.competitorB] ? (
                 <img 
                   src={robotImages[selectedMatch.competitorB]} 
@@ -1107,7 +1108,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringC
                 />
               ) : null}
               <div className={`w-full h-full bg-red-100 border border-red-200 items-center justify-center ${robotImages?.[selectedMatch.competitorB] ? 'hidden' : 'flex'}`}>
-                <span className="text-lg sm:text-xl font-bold text-red-600">{selectedMatch.competitorB?.[0] || '?'}</span>
+                <span className="text-3xl sm:text-4xl font-bold text-red-600">{selectedMatch.competitorB?.[0] || '?'}</span>
               </div>
             </div>
             <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorB || 'TBD'}</p>
