@@ -270,7 +270,7 @@ const StatusBadge = ({ status, winMethod, theme }) => {
 };
 
 // Match Detail Popup Component
-const MatchDetailPopup = ({ match, onClose, theme }) => {
+const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
   const t = themes[theme];
   const [judgeScores, setJudgeScores] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -343,8 +343,21 @@ const MatchDetailPopup = ({ match, onClose, theme }) => {
         <div className={`px-5 py-4 border-b ${t.divider}`}>
           <div className="grid grid-cols-3 items-center gap-4">
             <div className="text-center">
-              <div className={`w-12 h-12 mx-auto rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center mb-2 ${match.winner === match.competitorA ? 'ring-2 ring-green-500' : ''}`}>
-                <span className="text-lg font-bold text-blue-600">{match.competitorA?.[0] || '?'}</span>
+              <div className={`w-14 h-14 mx-auto rounded-lg overflow-hidden mb-2 ${match.winner === match.competitorA ? 'ring-2 ring-green-500' : ''}`}>
+                {robotImages?.[match.competitorA] ? (
+                  <img 
+                    src={robotImages[match.competitorA]} 
+                    alt={match.competitorA}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+                <div className={`w-full h-full bg-blue-100 border border-blue-200 items-center justify-center ${robotImages?.[match.competitorA] ? 'hidden' : 'flex'}`}>
+                  <span className="text-lg font-bold text-blue-600">{match.competitorA?.[0] || '?'}</span>
+                </div>
               </div>
               <p className={`font-semibold ${t.text} text-sm`}>{match.competitorA || 'TBD'}</p>
               {match.status === 'completed' && (
@@ -355,8 +368,21 @@ const MatchDetailPopup = ({ match, onClose, theme }) => {
               <span className={`${t.textFaint} font-medium`}>vs</span>
             </div>
             <div className="text-center">
-              <div className={`w-12 h-12 mx-auto rounded-lg bg-red-100 border border-red-200 flex items-center justify-center mb-2 ${match.winner === match.competitorB ? 'ring-2 ring-green-500' : ''}`}>
-                <span className="text-lg font-bold text-red-600">{match.competitorB?.[0] || '?'}</span>
+              <div className={`w-14 h-14 mx-auto rounded-lg overflow-hidden mb-2 ${match.winner === match.competitorB ? 'ring-2 ring-green-500' : ''}`}>
+                {robotImages?.[match.competitorB] ? (
+                  <img 
+                    src={robotImages[match.competitorB]} 
+                    alt={match.competitorB}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+                <div className={`w-full h-full bg-red-100 border border-red-200 items-center justify-center ${robotImages?.[match.competitorB] ? 'hidden' : 'flex'}`}>
+                  <span className="text-lg font-bold text-red-600">{match.competitorB?.[0] || '?'}</span>
+                </div>
               </div>
               <p className={`font-semibold ${t.text} text-sm`}>{match.competitorB || 'TBD'}</p>
               {match.status === 'completed' && (
@@ -2008,6 +2034,7 @@ export default function TournamentJudgingApp() {
         <MatchDetailPopup 
           match={selectedMatch}
           onClose={() => setSelectedMatch(null)} 
+          robotImages={robotImages}
           theme={theme} 
         />
       )}
