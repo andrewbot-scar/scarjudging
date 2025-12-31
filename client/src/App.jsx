@@ -205,6 +205,7 @@ function transformChallongeData(challongeData, tournamentUrl) {
       scores: match.scores_csv ? parseScores(match.scores_csv) : { a: 0, b: 0 },
       sourceA: sourceA,
       sourceB: sourceB,
+      completedAt: match.completed_at || null,
       tournamentName: tournament.name,
       tournamentUrl: tournamentUrl || tournament.url,
       tournamentId: tournament.id,
@@ -666,14 +667,33 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, theme }) => {
     (tourney.matches || []).filter(m => m.status === 'completed')
   );
 
-  // Sort by most recent (highest match number first, assuming higher = more recent)
+  // Sort by most recent completion time first
   const sortedMatches = [...allCompletedMatches].sort((a, b) => {
-    // Sort by tournament first, then by match number descending
+    // Sort by completedAt timestamp if available, most recent first
+    if (a.completedAt && b.completedAt) {
+      return new Date(b.completedAt) - new Date(a.completedAt);
+    }
+    // If no timestamp, fall back to match number (higher = more recent)
     if (a.tournamentName !== b.tournamentName) {
       return a.tournamentName.localeCompare(b.tournamentName);
     }
     return b.matchNum - a.matchNum;
   });
+
+  // Helper to format timestamp
+  const formatTime = (timestamp) => {
+    if (!timestamp) return null;
+    const date = new Date(timestamp);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    
+    if (isToday) {
+      return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    } else {
+      return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + 
+             date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    }
+  };
 
   if (sortedMatches.length === 0) {
     return (
@@ -689,12 +709,14 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, theme }) => {
     );
   }
 
-  // Group matches by tournament
-  const matchesByTournament = sortedMatches.reduce((acc, match) => {
-    if (!acc[match.tournamentName]) acc[match.tournamentName] = [];
-    acc[match.tournamentName].push(match);
-    return acc;
-  }, {});
+  // Group matches by tournament (but keep sorted order within each group)
+  const matchesByTournament = {};
+  sortedMatches.forEach(match => {
+    if (!matchesByTournament[match.tournamentName]) {
+      matchesByTournament[match.tournamentName] = [];
+    }
+    matchesByTournament[match.tournamentName].push(match);
+  });
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -750,6 +772,11 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, theme }) => {
                           {match.winner === match.competitorB && ' ✓'}
                         </span>
                       </div>
+                      {match.completedAt && (
+                        <p className={`text-xs ${t.textFaint} mt-0.5`}>
+                          {formatTime(match.completedAt)}
+                        </p>
+                      )}
                     </div>
                   </div>
                   
