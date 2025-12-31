@@ -717,13 +717,13 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, theme }) => {
           </div>
           <div>
             <p className={`text-2xl sm:text-3xl font-bold ${t.blueText}`}>
-              {sortedMatches.filter(m => m.winMethod === 'ko').length}
+              {sortedMatches.filter(m => m.winMethod === 'ko' || (m.scores?.a === 0 && m.scores?.b === 0)).length}
             </p>
             <p className={`text-xs sm:text-sm ${t.textMuted}`}>KOs</p>
           </div>
           <div>
             <p className={`text-2xl sm:text-3xl font-bold ${t.text}`}>
-              {sortedMatches.filter(m => m.winMethod !== 'ko').length}
+              {sortedMatches.filter(m => m.winMethod !== 'ko' && !(m.scores?.a === 0 && m.scores?.b === 0)).length}
             </p>
             <p className={`text-xs sm:text-sm ${t.textMuted}`}>Decisions</p>
           </div>
