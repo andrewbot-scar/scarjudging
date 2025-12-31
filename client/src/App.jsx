@@ -870,7 +870,7 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
 };
 
 // Judge Scoring View
-const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringCriteria, theme }) => {
+const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringCriteria, robotImages, theme }) => {
   const t = themes[theme];
   
   // Use provided criteria or default
@@ -1071,8 +1071,21 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringC
         
         <div className="grid grid-cols-3 items-center gap-2 sm:gap-4">
           <div className="text-center">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto rounded-lg bg-blue-100 border border-blue-200 flex items-center justify-center mb-1 sm:mb-2">
-              <span className="text-lg sm:text-xl font-bold text-blue-600">{selectedMatch.competitorA?.[0] || '?'}</span>
+            <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto rounded-lg overflow-hidden mb-1 sm:mb-2">
+              {robotImages?.[selectedMatch.competitorA] ? (
+                <img 
+                  src={robotImages[selectedMatch.competitorA]} 
+                  alt={selectedMatch.competitorA}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div className={`w-full h-full bg-blue-100 border border-blue-200 items-center justify-center ${robotImages?.[selectedMatch.competitorA] ? 'hidden' : 'flex'}`}>
+                <span className="text-lg sm:text-xl font-bold text-blue-600">{selectedMatch.competitorA?.[0] || '?'}</span>
+              </div>
             </div>
             <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorA || 'TBD'}</p>
             <p className={`text-xl sm:text-2xl font-bold ${t.blueText} mt-1`}>{isKO ? '—' : totalA}</p>
@@ -1081,8 +1094,21 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringC
             <span className={`${t.textFaint} font-medium text-sm`}>vs</span>
           </div>
           <div className="text-center">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto rounded-lg bg-red-100 border border-red-200 flex items-center justify-center mb-1 sm:mb-2">
-              <span className="text-lg sm:text-xl font-bold text-red-600">{selectedMatch.competitorB?.[0] || '?'}</span>
+            <div className="w-12 h-12 sm:w-14 sm:h-14 mx-auto rounded-lg overflow-hidden mb-1 sm:mb-2">
+              {robotImages?.[selectedMatch.competitorB] ? (
+                <img 
+                  src={robotImages[selectedMatch.competitorB]} 
+                  alt={selectedMatch.competitorB}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.nextSibling.style.display = 'flex';
+                  }}
+                />
+              ) : null}
+              <div className={`w-full h-full bg-red-100 border border-red-200 items-center justify-center ${robotImages?.[selectedMatch.competitorB] ? 'hidden' : 'flex'}`}>
+                <span className="text-lg sm:text-xl font-bold text-red-600">{selectedMatch.competitorB?.[0] || '?'}</span>
+              </div>
             </div>
             <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorB || 'TBD'}</p>
             <p className={`text-xl sm:text-2xl font-bold ${t.redText} mt-1`}>{isKO ? '—' : totalB}</p>
@@ -1991,6 +2017,7 @@ export default function TournamentJudgingApp() {
             currentUser={currentUser}
             onScoreSubmitted={handleScoreSubmitted}
             scoringCriteria={scoringCriteria}
+            robotImages={robotImages}
             theme={theme} 
           />
         )}
