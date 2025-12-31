@@ -74,11 +74,11 @@ const api = {
     return response.json();
   },
 
-  async saveEvent(eventId, name, tournaments, scoringCriteria) {
+  async saveEvent(eventId, name, tournaments, scoringCriteria, robotImages) {
     const response = await fetch(`${API_BASE_URL}/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId, name, tournaments, scoringCriteria }),
+      body: JSON.stringify({ eventId, name, tournaments, scoringCriteria, robotImages }),
     });
     if (!response.ok) throw new Error('Failed to save event');
     return response.json();
@@ -89,6 +89,12 @@ const api = {
       method: 'DELETE',
     });
     if (!response.ok) throw new Error('Failed to delete event');
+    return response.json();
+  },
+
+  async scrapeRCE(url) {
+    const response = await fetch(`${API_BASE_URL}/scrape-rce?url=${encodeURIComponent(url)}`);
+    if (!response.ok) throw new Error('Failed to scrape RCE page');
     return response.json();
   },
 };
@@ -434,6 +440,39 @@ const getCompetitorDisplay = (competitor, source) => {
   return { text: `${typeLabel} of Match ${source.matchNum}`, isPlaceholder: true };
 };
 
+// Robot Avatar Component - displays robot image or fallback initial
+const RobotAvatar = ({ name, robotImages, size = 'md', colorClass = 'bg-gray-100 text-gray-600' }) => {
+  const imageUrl = robotImages?.[name];
+  const sizeClasses = {
+    sm: 'w-8 h-8 text-sm',
+    md: 'w-12 h-12 text-lg',
+    lg: 'w-14 h-14 text-xl',
+  };
+  
+  if (imageUrl) {
+    return (
+      <div className={`${sizeClasses[size]} rounded-lg overflow-hidden flex-shrink-0`}>
+        <img 
+          src={imageUrl} 
+          alt={name}
+          className="w-full h-full object-cover"
+          onError={(e) => {
+            // On error, replace with initial
+            e.target.style.display = 'none';
+            e.target.parentElement.innerHTML = `<span class="w-full h-full flex items-center justify-center ${colorClass} font-bold">${name?.[0] || '?'}</span>`;
+          }}
+        />
+      </div>
+    );
+  }
+  
+  return (
+    <div className={`${sizeClasses[size]} rounded-lg ${colorClass} border border-opacity-50 flex items-center justify-center flex-shrink-0`}>
+      <span className="font-bold">{name?.[0] || '?'}</span>
+    </div>
+  );
+};
+
 // Split Point Slider Component - Mobile Optimized
 const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) => {
   const t = themes[theme];
@@ -659,7 +698,7 @@ const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
 };
 
 // Completed Matches View
-const CompletedMatchesView = ({ tournaments, onMatchClick, theme }) => {
+const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme }) => {
   const t = themes[theme];
   
   // Get all completed matches from all tournaments
@@ -745,11 +784,18 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, theme }) => {
               className={`px-4 sm:px-5 py-3 ${t.hoverBg} cursor-pointer transition-colors`}
             >
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="flex-shrink-0 text-center">
+                <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                  <div className="flex-shrink-0 text-center w-10">
                     <span className={`text-xs ${t.textFaint} font-mono block`}>M{match.matchNum}</span>
-                    <span className={`text-xs ${t.textFaint} block truncate max-w-[60px]`}>{match.tournamentName.split(' ')[0]}</span>
+                    <span className={`text-xs ${t.textFaint} block truncate`}>{match.tournamentName.split(' ')[0]}</span>
                   </div>
+                  
+                  {/* Robot images */}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <RobotAvatar name={match.competitorA} robotImages={robotImages} size="sm" colorClass="bg-blue-100 text-blue-600" />
+                    <RobotAvatar name={match.competitorB} robotImages={robotImages} size="sm" colorClass="bg-red-100 text-red-600" />
+                  </div>
+                  
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`font-semibold ${match.winner === match.competitorA ? t.winnerText : t.text} text-sm truncate`}>
@@ -1105,21 +1151,24 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringC
 };
 
 // Admin Dashboard View
-const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, scoringCriteria, onEventIdChange, onEventNameChange, onAddTournament, onRemoveTournament, onRefreshAll, onSaveToServer, onCopyLink, onScoringCriteriaChange, theme }) => {
+const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, scoringCriteria, robotImages, onEventIdChange, onEventNameChange, onAddTournament, onRemoveTournament, onRefreshAll, onSaveToServer, onCopyLink, onScoringCriteriaChange, onRobotImagesChange, theme }) => {
   const t = themes[theme];
   const [selectedTab, setSelectedTab] = useState('settings');
   const [newTournamentUrl, setNewTournamentUrl] = useState('');
+  const [newRceUrl, setNewRceUrl] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState(null);
   const [localEventId, setLocalEventId] = useState(eventId);
   const [localEventName, setLocalEventName] = useState(eventName);
   const [localCriteria, setLocalCriteria] = useState(scoringCriteria);
+  const [localRobotImages, setLocalRobotImages] = useState(robotImages || {});
   
   useEffect(() => {
     setLocalEventId(eventId);
     setLocalEventName(eventName);
     setLocalCriteria(scoringCriteria);
-  }, [eventId, eventName, scoringCriteria]);
+    setLocalRobotImages(robotImages || {});
+  }, [eventId, eventName, scoringCriteria, robotImages]);
 
   const updateCriterion = (index, field, value) => {
     const updated = [...localCriteria];
@@ -1144,6 +1193,43 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
   };
 
   const totalPoints = localCriteria.reduce((sum, c) => sum + c.points, 0);
+
+  const handleScrapeRCE = async () => {
+    if (!newRceUrl.trim()) return;
+    setIsLoading(true);
+    setSyncStatus(null);
+    
+    try {
+      const result = await api.scrapeRCE(newRceUrl.trim());
+      if (result.success && result.robots) {
+        // Merge new robot images with existing ones
+        const newImages = { ...localRobotImages };
+        let addedCount = 0;
+        result.robots.forEach(robot => {
+          if (robot.imageUrl && robot.name) {
+            // Normalize the name for matching (lowercase, trimmed)
+            const normalizedName = robot.name.trim();
+            newImages[normalizedName] = robot.imageUrl;
+            addedCount++;
+          }
+        });
+        setLocalRobotImages(newImages);
+        onRobotImagesChange(newImages);
+        setSyncStatus({ success: true, message: `Found ${result.robotCount} robots, ${addedCount} with images!` });
+        setNewRceUrl('');
+      }
+    } catch (err) {
+      setSyncStatus({ success: false, message: err.message });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleClearRobotImages = () => {
+    setLocalRobotImages({});
+    onRobotImagesChange({});
+    setSyncStatus({ success: true, message: 'Robot images cleared' });
+  };
 
   const handleAddTournament = async () => {
     if (!newTournamentUrl.trim()) return;
@@ -1206,13 +1292,13 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
   
   return (
     <div className="space-y-4">
-      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-1 inline-flex gap-1`}>
-        {['settings', 'tournaments', 'share'].map(tab => (
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-1 inline-flex gap-1 flex-wrap`}>
+        {['settings', 'tournaments', 'images', 'share'].map(tab => (
           <button key={tab} onClick={() => setSelectedTab(tab)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold capitalize transition-colors ${
+            className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold capitalize transition-colors ${
               selectedTab === tab ? 'bg-gray-900 text-white' : `${t.textMuted} hover:${t.text}`
             }`}>
-            {tab}
+            {tab === 'images' ? 'Robot Images' : tab}
           </button>
         ))}
       </div>
@@ -1388,6 +1474,86 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
           )}
         </div>
       )}
+
+      {selectedTab === 'images' && (
+        <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5 space-y-5`}>
+          <h3 className={`font-bold ${t.text}`}>Robot Images</h3>
+          
+          <div className={`${t.tableBg} rounded-lg p-4`}>
+            <p className={`text-sm ${t.textMuted}`}>
+              Import robot photos from RobotCombatEvents registration pages. Images will display in brackets, completed matches, and judge scoring.
+            </p>
+          </div>
+
+          {/* RCE URL Input */}
+          <div>
+            <label className={`block text-sm font-medium ${t.textMuted} mb-1`}>RobotCombatEvents Registration URL</label>
+            <div className="flex gap-2">
+              <input 
+                type="text" 
+                value={newRceUrl}
+                onChange={(e) => setNewRceUrl(e.target.value)}
+                placeholder="https://www.robotcombatevents.com/events/XXXX/competitions/YYYY"
+                className={`flex-1 px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} text-sm`}
+              />
+              <button 
+                onClick={handleScrapeRCE}
+                disabled={isLoading || !newRceUrl.trim()}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
+              >
+                {isLoading ? 'Loading...' : '📷 Import'}
+              </button>
+            </div>
+            <p className={`text-xs ${t.textFaint} mt-1`}>
+              Paste the URL of a competition registration page to import robot photos
+            </p>
+          </div>
+
+          {/* Current Images Summary */}
+          <div className={`pt-4 border-t ${t.divider}`}>
+            <div className="flex justify-between items-center mb-3">
+              <p className={`text-sm font-medium ${t.textMuted}`}>
+                Loaded Images ({Object.keys(localRobotImages).length})
+              </p>
+              {Object.keys(localRobotImages).length > 0 && (
+                <button
+                  onClick={handleClearRobotImages}
+                  className="text-xs px-2 py-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+            
+            {Object.keys(localRobotImages).length > 0 ? (
+              <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2 max-h-64 overflow-y-auto">
+                {Object.entries(localRobotImages).map(([name, url]) => (
+                  <div key={name} className="text-center">
+                    <div className={`w-12 h-12 mx-auto rounded-lg ${t.tableBg} overflow-hidden`}>
+                      <img 
+                        src={url} 
+                        alt={name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => { e.target.style.display = 'none'; }}
+                      />
+                    </div>
+                    <p className={`text-xs ${t.textFaint} mt-1 truncate`} title={name}>{name}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className={`${t.tableBg} rounded-lg p-6 text-center`}>
+                <p className={t.textMuted}>No robot images loaded yet</p>
+                <p className={`text-xs ${t.textFaint} mt-1`}>Import from RobotCombatEvents above</p>
+              </div>
+            )}
+          </div>
+
+          <p className={`text-xs ${t.textFaint}`}>
+            Remember to save the event (Share tab) to persist robot images.
+          </p>
+        </div>
+      )}
       
       {selectedTab === 'share' && (
         <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5 space-y-5`}>
@@ -1489,6 +1655,7 @@ export default function TournamentJudgingApp() {
   const [tournamentUrls, setTournamentUrls] = useState([]);
   const [tournaments, setTournaments] = useState([]);
   const [scoringCriteria, setScoringCriteria] = useState(DEFAULT_SCORING_CRITERIA);
+  const [robotImages, setRobotImages] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [eventLoaded, setEventLoaded] = useState(false);
@@ -1517,6 +1684,7 @@ export default function TournamentJudgingApp() {
             setEventName(eventData.name || eventData.eventId);
             setTournamentUrls(eventData.tournaments || []);
             setScoringCriteria(eventData.scoringCriteria || DEFAULT_SCORING_CRITERIA);
+            setRobotImages(eventData.robotImages || {});
             setEventLoaded(true);
           }
         } catch (err) {
@@ -1584,7 +1752,7 @@ export default function TournamentJudgingApp() {
   };
 
   const saveToServer = async (id, name) => {
-    await api.saveEvent(id, name, tournamentUrls, scoringCriteria);
+    await api.saveEvent(id, name, tournamentUrls, scoringCriteria, robotImages);
     setUrlParam('event', id);
   };
 
@@ -1786,6 +1954,7 @@ export default function TournamentJudgingApp() {
           <CompletedMatchesView 
             tournaments={tournaments} 
             onMatchClick={setSelectedMatch} 
+            robotImages={robotImages}
             theme={theme} 
           />
         )}
@@ -1807,6 +1976,7 @@ export default function TournamentJudgingApp() {
             tournamentUrls={tournamentUrls}
             tournaments={tournaments}
             scoringCriteria={scoringCriteria}
+            robotImages={robotImages}
             onEventIdChange={setEventId}
             onEventNameChange={setEventName}
             onAddTournament={addTournament}
@@ -1815,6 +1985,7 @@ export default function TournamentJudgingApp() {
             onSaveToServer={saveToServer}
             onCopyLink={copyLink}
             onScoringCriteriaChange={setScoringCriteria}
+            onRobotImagesChange={setRobotImages}
             theme={theme} 
           />
         )}
