@@ -667,16 +667,13 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, theme }) => {
     (tourney.matches || []).filter(m => m.status === 'completed')
   );
 
-  // Sort by most recent completion time first
+  // Sort by most recent completion time first (newest at top)
   const sortedMatches = [...allCompletedMatches].sort((a, b) => {
     // Sort by completedAt timestamp if available, most recent first
     if (a.completedAt && b.completedAt) {
       return new Date(b.completedAt) - new Date(a.completedAt);
     }
     // If no timestamp, fall back to match number (higher = more recent)
-    if (a.tournamentName !== b.tournamentName) {
-      return a.tournamentName.localeCompare(b.tournamentName);
-    }
     return b.matchNum - a.matchNum;
   });
 
@@ -709,15 +706,6 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, theme }) => {
     );
   }
 
-  // Group matches by tournament (but keep sorted order within each group)
-  const matchesByTournament = {};
-  sortedMatches.forEach(match => {
-    if (!matchesByTournament[match.tournamentName]) {
-      matchesByTournament[match.tournamentName] = [];
-    }
-    matchesByTournament[match.tournamentName].push(match);
-  });
-
   return (
     <div className="space-y-4 sm:space-y-6">
       {/* Summary Stats */}
@@ -742,62 +730,69 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, theme }) => {
         </div>
       </div>
 
-      {/* Matches List by Tournament */}
-      {Object.entries(matchesByTournament).map(([tournamentName, matches]) => (
-        <div key={tournamentName} className={`${t.card} rounded-xl border ${t.cardBorder} overflow-hidden`}>
-          <div className={`px-4 sm:px-5 py-3 border-b ${t.divider} ${t.tableBg}`}>
-            <h2 className={`font-bold ${t.text} text-sm sm:text-base`}>{tournamentName}</h2>
-            <p className={`text-xs ${t.textMuted}`}>{matches.length} completed match{matches.length !== 1 ? 'es' : ''}</p>
-          </div>
-          
-          <div className="divide-y divide-gray-200 dark:divide-gray-700">
-            {matches.map(match => (
-              <div 
-                key={match.id}
-                onClick={() => onMatchClick(match)}
-                className={`px-4 sm:px-5 py-3 ${t.hoverBg} cursor-pointer transition-colors`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <span className={`text-xs ${t.textFaint} font-mono flex-shrink-0`}>M{match.matchNum}</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`font-semibold ${match.winner === match.competitorA ? t.winnerText : t.text} text-sm truncate`}>
-                          {match.competitorA}
-                          {match.winner === match.competitorA && ' ✓'}
-                        </span>
-                        <span className={`text-xs ${t.textFaint}`}>vs</span>
-                        <span className={`font-semibold ${match.winner === match.competitorB ? t.winnerText : t.text} text-sm truncate`}>
-                          {match.competitorB}
-                          {match.winner === match.competitorB && ' ✓'}
-                        </span>
-                      </div>
-                      {match.completedAt && (
-                        <p className={`text-xs ${t.textFaint} mt-0.5`}>
-                          {formatTime(match.completedAt)}
-                        </p>
-                      )}
+      {/* Single unified list of all matches */}
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} overflow-hidden`}>
+        <div className={`px-4 sm:px-5 py-3 border-b ${t.divider} ${t.tableBg}`}>
+          <h2 className={`font-bold ${t.text} text-sm sm:text-base`}>All Completed Matches</h2>
+          <p className={`text-xs ${t.textMuted}`}>Most recent at top</p>
+        </div>
+        
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+          {sortedMatches.map(match => (
+            <div 
+              key={`${match.tournamentId}-${match.id}`}
+              onClick={() => onMatchClick(match)}
+              className={`px-4 sm:px-5 py-3 ${t.hoverBg} cursor-pointer transition-colors`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="flex-shrink-0 text-center">
+                    <span className={`text-xs ${t.textFaint} font-mono block`}>M{match.matchNum}</span>
+                    <span className={`text-xs ${t.textFaint} block truncate max-w-[60px]`}>{match.tournamentName.split(' ')[0]}</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`font-semibold ${match.winner === match.competitorA ? t.winnerText : t.text} text-sm truncate`}>
+                        {match.competitorA}
+                        {match.winner === match.competitorA && ' ✓'}
+                      </span>
+                      <span className={`text-xs ${t.textFaint}`}>vs</span>
+                      <span className={`font-semibold ${match.winner === match.competitorB ? t.winnerText : t.text} text-sm truncate`}>
+                        {match.competitorB}
+                        {match.winner === match.competitorB && ' ✓'}
+                      </span>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                    {match.winMethod === 'ko' ? (
-                      <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.koBg} ${t.koText}`}>KO</span>
-                    ) : (
-                      <span className={`text-sm font-mono ${t.textMuted}`}>
-                        {match.scores?.a}-{match.scores?.b}
-                      </span>
-                    )}
-                    <svg className={`w-4 h-4 ${t.textFaint}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
+                </div>
+                
+                <div className="flex items-center gap-3 flex-shrink-0 ml-2">
+                  {match.completedAt && (
+                    <span className={`text-xs ${t.textFaint} hidden sm:block`}>
+                      {formatTime(match.completedAt)}
+                    </span>
+                  )}
+                  {match.winMethod === 'ko' || (match.scores?.a === 0 && match.scores?.b === 0) ? (
+                    <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.koBg} ${t.koText}`}>KO</span>
+                  ) : (
+                    <span className={`text-sm font-mono ${t.textMuted}`}>
+                      {match.scores?.a}-{match.scores?.b}
+                    </span>
+                  )}
+                  <svg className={`w-4 h-4 ${t.textFaint}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
                 </div>
               </div>
-            ))}
-          </div>
+              {/* Mobile timestamp - show below on small screens */}
+              {match.completedAt && (
+                <p className={`text-xs ${t.textFaint} mt-1 sm:hidden`}>
+                  {formatTime(match.completedAt)}
+                </p>
+              )}
+            </div>
+          ))}
         </div>
-      ))}
+      </div>
     </div>
   );
 };
