@@ -254,7 +254,7 @@ function parseScores(scoresCsv) {
 }
 
 // Status Badge Component
-const StatusBadge = ({ status, winMethod, theme }) => {
+const StatusBadge = ({ status, winMethod, scores, theme }) => {
   const t = themes[theme];
   
   if (status === 'pending') {
@@ -263,7 +263,8 @@ const StatusBadge = ({ status, winMethod, theme }) => {
   if (status === 'active') {
     return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.liveBg} ${t.liveText}`}>● Live</span>;
   }
-  if (winMethod === 'ko') {
+  // Detect KO: either winMethod is 'ko' OR one side has 0 points (covers both old 0-0 and new 33-0 format)
+  if (winMethod === 'ko' || (scores && (scores.a === 0 || scores.b === 0))) {
     return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.koBg} ${t.koText}`}>KO</span>;
   }
   return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.decisionBg} ${t.decisionText}`}>Decision</span>;
@@ -327,7 +328,7 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
             </div>
             <span className={`text-xs ${t.textFaint} font-mono`}>Match {match.matchNum}</span>
             <div className="flex items-center gap-2 mt-1">
-              <StatusBadge status={match.status} winMethod={match.winMethod} theme={theme} />
+              <StatusBadge status={match.status} winMethod={match.winMethod} scores={match.scores} theme={theme} />
               {match.winner && (
                 <span className={`text-xs ${t.textMuted}`}>Winner: {match.winner}</span>
               )}
@@ -571,7 +572,7 @@ const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
             )}
             <span className={`text-xs ${t.textFaint} font-mono flex-shrink-0`}>M{match.matchNum}</span>
           </div>
-          <StatusBadge status={match.status} winMethod={match.winMethod} theme={theme} />
+          <StatusBadge status={match.status} winMethod={match.winMethod} scores={match.scores} theme={theme} />
         </div>
         
         <div className="space-y-1.5">
@@ -1089,7 +1090,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringC
             </span>
             <div className={`text-xs ${t.textFaint} font-mono mt-1`}>Match {selectedMatch.matchNum}</div>
             <div className="mt-1">
-              <StatusBadge status={selectedMatch.status} theme={theme} />
+              <StatusBadge status={selectedMatch.status} winMethod={selectedMatch.winMethod} scores={selectedMatch.scores} theme={theme} />
             </div>
           </div>
           <div className="text-right">
