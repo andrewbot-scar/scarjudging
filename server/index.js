@@ -723,11 +723,18 @@ function calculateMatchResult(matchData) {
   // Check if any competitor has 2+ KO votes
   for (const [winnerId, votes] of Object.entries(koVotes)) {
     if (votes >= 2) {
+      // Calculate max possible points (3 judges × total points per judge)
+      // Default is 11 points per judge (3+5+3), but could be different with custom criteria
+      // For KO, give winner all points from all 3 judges
+      const maxPointsPerJudge = 11; // Default total points
+      const totalMaxPoints = maxPointsPerJudge * 3; // 33 total
+      
+      const isWinnerA = parseInt(winnerId) === matchData.competitorAId;
       return {
         winnerId: parseInt(winnerId),
         winMethod: 'ko',
-        scoreA: 0,
-        scoreB: 0,
+        scoreA: isWinnerA ? totalMaxPoints : 0,
+        scoreB: isWinnerA ? 0 : totalMaxPoints,
         koVotes: votes,
       };
     }
