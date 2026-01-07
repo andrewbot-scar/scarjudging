@@ -73,6 +73,18 @@ async function initDatabase() {
       )
     `);
 
+    // Create active_matches table for tracking which match is currently in progress per tournament
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS active_matches (
+        id SERIAL PRIMARY KEY,
+        event_id VARCHAR(255) NOT NULL,
+        tournament_id VARCHAR(255) NOT NULL,
+        match_id VARCHAR(255) NOT NULL,
+        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(event_id, tournament_id)
+      )
+    `);
+
     console.log('Database tables initialized successfully');
   } catch (error) {
     console.error('Failed to initialize database:', error);
@@ -284,6 +296,104 @@ app.delete('/api/events/:eventId', async (req, res) => {
     res.json({ success: true, message: `Event ${eventId} deleted` });
   } catch (error) {
     console.error('Error deleting event:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// ACTIVE MATCH TRACKING (In-Progress Matches)
+// ============================================
+
+// In-memory fallback for active matches
+const memoryActiveMatches = {};
+
+// POST /api/events/:eventId/active-match - Set the currently fighting match for a tournament
+app.post('/api/events/:eventId/active-match', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { tournamentId, matchId } = req.body;
+
+    if (!tournamentId || !matchId) {
+      return res.status(400).json({ error: 'tournamentId and matchId are required' });
+    }
+
+    if (pool) {
+      // Use PostgreSQL - upsert
+      await pool.query(`
+        INSERT INTO active_matches (event_id, tournament_id, match_id, started_at)
+        VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+        ON CONFLICT (event_id, tournament_id)
+        DO UPDATE SET match_id = $3, started_at = CURRENT_TIMESTAMP
+      `, [eventId, tournamentId, matchId]);
+      
+      console.log(`Active match set: event=${eventId}, tournament=${tournamentId}, match=${matchId}`);
+    } else {
+      // Fallback to in-memory
+      if (!memoryActiveMatches[eventId]) {
+        memoryActiveMatches[eventId] = {};
+      }
+      memoryActiveMatches[eventId][tournamentId] = {
+        matchId,
+        startedAt: new Date().toISOString()
+      };
+    }
+
+    res.json({ success: true, eventId, tournamentId, matchId });
+  } catch (error) {
+    console.error('Error setting active match:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /api/events/:eventId/active-match/:tournamentId - Clear the active match for a tournament
+app.delete('/api/events/:eventId/active-match/:tournamentId', async (req, res) => {
+  try {
+    const { eventId, tournamentId } = req.params;
+
+    if (pool) {
+      await pool.query(
+        'DELETE FROM active_matches WHERE event_id = $1 AND tournament_id = $2',
+        [eventId, tournamentId]
+      );
+      console.log(`Active match cleared: event=${eventId}, tournament=${tournamentId}`);
+    } else {
+      if (memoryActiveMatches[eventId]) {
+        delete memoryActiveMatches[eventId][tournamentId];
+      }
+    }
+
+    res.json({ success: true, message: 'Active match cleared' });
+  } catch (error) {
+    console.error('Error clearing active match:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/events/:eventId/active-matches - Get all active matches for an event
+app.get('/api/events/:eventId/active-matches', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    if (pool) {
+      const result = await pool.query(
+        'SELECT tournament_id, match_id, started_at FROM active_matches WHERE event_id = $1',
+        [eventId]
+      );
+      
+      const activeMatches = {};
+      result.rows.forEach(row => {
+        activeMatches[row.tournament_id] = {
+          matchId: row.match_id,
+          startedAt: row.started_at
+        };
+      });
+      
+      res.json(activeMatches);
+    } else {
+      res.json(memoryActiveMatches[eventId] || {});
+    }
+  } catch (error) {
+    console.error('Error getting active matches:', error);
     res.status(500).json({ error: error.message });
   }
 });
