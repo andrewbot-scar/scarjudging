@@ -1710,19 +1710,19 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                 </p>
               </div>
 
-              {/* Spectator Link */}
+              {/* Spectator Link - Subdomain */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textMuted}`}>👀 Spectator Link</label>
+                <label className={`block text-sm font-medium ${t.textMuted}`}>👀 Spectator Link (Recommended)</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
-                    value={`${shareableLink}&spectator=true`}
+                    value={`https://brackets.socalattackrobots.com/?event=${encodeURIComponent(localEventId)}`}
                     readOnly
                     className={`flex-1 px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} text-sm`}
                   />
                   <button 
                     onClick={() => {
-                      navigator.clipboard.writeText(`${shareableLink}&spectator=true`);
+                      navigator.clipboard.writeText(`https://brackets.socalattackrobots.com/?event=${encodeURIComponent(localEventId)}`);
                       setSyncStatus({ success: true, message: 'Spectator link copied!' });
                     }}
                     className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold transition-colors"
@@ -1731,7 +1731,32 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
-                  For competitors & audience - shows Bracket and Completed only (no Judge tab)
+                  For competitors & audience - separate domain with no access to Judge/Admin
+                </p>
+              </div>
+
+              {/* Legacy Spectator Link */}
+              <div className="space-y-2">
+                <label className={`block text-sm font-medium ${t.textFaint}`}>👀 Spectator Link (Legacy)</label>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    value={`${shareableLink}&spectator=true`}
+                    readOnly
+                    className={`flex-1 px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} text-sm opacity-60`}
+                  />
+                  <button 
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${shareableLink}&spectator=true`);
+                      setSyncStatus({ success: true, message: 'Legacy spectator link copied!' });
+                    }}
+                    className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors"
+                  >
+                    📋 Copy
+                  </button>
+                </div>
+                <p className={`text-xs ${t.textFaint}`}>
+                  Alternate link using URL parameter (less secure)
                 </p>
               </div>
             </>
@@ -1775,8 +1800,12 @@ export default function TournamentJudgingApp() {
   
   // Check if viewing via shared link (hides admin)
   const isSharedView = Boolean(getUrlParam('event'));
-  // Check if spectator mode (hides judge tab too)
-  const isSpectatorView = getUrlParam('spectator') === 'true' || getUrlParam('view') === 'spectator';
+  
+  // Check if spectator mode - either by URL param OR by hostname
+  // brackets.socalattackrobots.com = always spectator mode
+  const hostname = window.location.hostname;
+  const isSpectatorDomain = hostname.startsWith('brackets.') || hostname.startsWith('spectator.');
+  const isSpectatorView = isSpectatorDomain || getUrlParam('spectator') === 'true' || getUrlParam('view') === 'spectator';
   
   const theme = darkMode ? 'dark' : 'light';
   const t = themes[theme];
@@ -1938,7 +1967,7 @@ export default function TournamentJudgingApp() {
                   Judge
                 </button>
               )}
-              {!isSharedView && (
+              {!isSharedView && !isSpectatorDomain && (
                 <button onClick={() => handleLogin('admin')}
                   className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                     view === 'admin' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
@@ -1970,7 +1999,7 @@ export default function TournamentJudgingApp() {
                   Judge
                 </button>
               )}
-              {!isSharedView && (
+              {!isSharedView && !isSpectatorDomain && (
                 <button onClick={() => handleLogin('admin')}
                   className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     view === 'admin' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
