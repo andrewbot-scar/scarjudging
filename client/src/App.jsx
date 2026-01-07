@@ -612,10 +612,170 @@ const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
   );
 };
 
+// Now Fighting Component - Shows active match prominently with judge status
+const NowFightingCard = ({ match, robotImages, onMatchClick, theme }) => {
+  const t = themes[theme];
+  const [judgeStatus, setJudgeStatus] = useState({ judges: {}, judgeCount: 0 });
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Poll for judge status every 3 seconds
+  useEffect(() => {
+    if (!match) return;
+
+    const fetchJudgeStatus = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/matches/${match.challongeId}/scores/details?tournamentId=${match.tournamentUrl || ''}`);
+        if (response.ok) {
+          const data = await response.json();
+          setJudgeStatus(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch judge status:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchJudgeStatus();
+    const interval = setInterval(fetchJudgeStatus, 3000);
+    return () => clearInterval(interval);
+  }, [match]);
+
+  if (!match) return null;
+
+  const submittedJudges = Object.keys(judgeStatus.judges || {});
+  const judgeNumbers = ['judge_1', 'judge_2', 'judge_3'];
+  const waitingOn = judgeNumbers.filter(j => !submittedJudges.includes(j));
+
+  return (
+    <div 
+      onClick={() => onMatchClick && onMatchClick(match)}
+      className={`${t.card} rounded-xl border-2 border-amber-400 shadow-lg shadow-amber-400/20 overflow-hidden cursor-pointer transition-all hover:shadow-xl hover:shadow-amber-400/30`}
+    >
+      {/* Header */}
+      <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <span className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+          </span>
+          <span className="text-white font-bold text-sm sm:text-base">NOW FIGHTING</span>
+        </div>
+        <span className="text-white/80 text-xs sm:text-sm">{match.tournamentName}</span>
+      </div>
+
+      {/* Match Content */}
+      <div className="p-4 sm:p-5">
+        <div className="grid grid-cols-3 items-center gap-4">
+          {/* Competitor A */}
+          <div className="text-center">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto rounded-lg overflow-hidden mb-2">
+              {robotImages?.[match.competitorA] ? (
+                <img 
+                  src={robotImages[match.competitorA]} 
+                  alt={match.competitorA}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-blue-100 border border-blue-200 flex items-center justify-center">
+                  <span className="text-2xl sm:text-3xl font-bold text-blue-600">{match.competitorA?.[0] || '?'}</span>
+                </div>
+              )}
+            </div>
+            <p className={`font-bold ${t.text} text-sm sm:text-base`}>{match.competitorA || 'TBD'}</p>
+          </div>
+
+          {/* VS */}
+          <div className="text-center">
+            <div className={`text-2xl sm:text-3xl font-bold ${t.textFaint}`}>VS</div>
+            <p className={`text-xs ${t.textMuted} mt-1`}>Match {match.matchNum}</p>
+          </div>
+
+          {/* Competitor B */}
+          <div className="text-center">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto rounded-lg overflow-hidden mb-2">
+              {robotImages?.[match.competitorB] ? (
+                <img 
+                  src={robotImages[match.competitorB]} 
+                  alt={match.competitorB}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full bg-red-100 border border-red-200 flex items-center justify-center">
+                  <span className="text-2xl sm:text-3xl font-bold text-red-600">{match.competitorB?.[0] || '?'}</span>
+                </div>
+              )}
+            </div>
+            <p className={`font-bold ${t.text} text-sm sm:text-base`}>{match.competitorB || 'TBD'}</p>
+          </div>
+        </div>
+
+        {/* Judge Status */}
+        <div className={`mt-4 pt-4 border-t ${t.divider}`}>
+          <div className="flex items-center justify-between">
+            <span className={`text-xs sm:text-sm font-medium ${t.textMuted}`}>Judge Scores</span>
+            <span className={`text-xs ${t.textFaint}`}>{submittedJudges.length}/3 submitted</span>
+          </div>
+          
+          <div className="flex gap-2 mt-2">
+            {[1, 2, 3].map(num => {
+              const judgeId = `judge_${num}`;
+              const hasSubmitted = submittedJudges.includes(judgeId);
+              return (
+                <div 
+                  key={num}
+                  className={`flex-1 py-2 px-3 rounded-lg text-center text-sm font-medium transition-all ${
+                    hasSubmitted 
+                      ? 'bg-green-100 text-green-700 border border-green-200' 
+                      : `${t.tableBg} ${t.textMuted} border ${t.cardBorder}`
+                  }`}
+                >
+                  {hasSubmitted ? '✓ Judge ' + num : 'Judge ' + num}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Waiting indicator */}
+          {waitingOn.length > 0 && waitingOn.length < 3 && (
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <div className="animate-pulse w-2 h-2 rounded-full bg-amber-500"></div>
+              <span className={`text-sm ${t.textMuted}`}>
+                Waiting on {waitingOn.map(j => `Judge ${j.split('_')[1]}`).join(', ')}...
+              </span>
+            </div>
+          )}
+
+          {waitingOn.length === 3 && (
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <span className={`text-sm ${t.textFaint}`}>
+                Waiting for judges to submit scores...
+              </span>
+            </div>
+          )}
+
+          {waitingOn.length === 0 && submittedJudges.length === 3 && (
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <span className="text-sm text-green-600 font-medium">
+                ✓ All judges submitted - finalizing...
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Public Bracket View - Mobile Optimized
-const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
+const PublicBracketView = ({ tournaments, onMatchClick, robotImages, theme }) => {
   const t = themes[theme];
   const [selectedTournamentIndex, setSelectedTournamentIndex] = useState(0);
+  
+  // Find all active matches across all tournaments
+  const allActiveMatches = tournaments.flatMap(tourney => 
+    (tourney.matches || []).filter(m => m.status === 'active' && m.competitorA && m.competitorB)
+  );
   
   if (!tournaments || tournaments.length === 0) {
     return (
@@ -650,6 +810,21 @@ const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
   
   return (
     <div className="space-y-4 sm:space-y-6">
+      {/* Now Fighting Section - Shows all active matches */}
+      {allActiveMatches.length > 0 && (
+        <div className="space-y-3">
+          {allActiveMatches.map(match => (
+            <NowFightingCard 
+              key={`${match.tournamentId}-${match.id}`}
+              match={match}
+              robotImages={robotImages}
+              onMatchClick={onMatchClick}
+              theme={theme}
+            />
+          ))}
+        </div>
+      )}
+
       {tournaments.length > 1 && (
         <div className={`${t.card} rounded-xl border ${t.cardBorder} p-2`}>
           <div className="flex gap-2 overflow-x-auto pb-1 -mb-1">
@@ -728,6 +903,14 @@ const PublicBracketView = ({ tournaments, onMatchClick, theme }) => {
 const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme }) => {
   const t = themes[theme];
   
+  // Helper to detect if a match was a KO
+  // KO matches have winMethod 'ko', or one side has 0 points (old 0-0 format or new 33-0 format)
+  const isKnockout = (match) => {
+    if (match.winMethod === 'ko') return true;
+    if (match.scores?.a === 0 || match.scores?.b === 0) return true;
+    return false;
+  };
+  
   // Get all completed matches from all tournaments
   const allCompletedMatches = tournaments.flatMap(tourney => 
     (tourney.matches || []).filter(m => m.status === 'completed')
@@ -783,13 +966,13 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
           </div>
           <div>
             <p className={`text-2xl sm:text-3xl font-bold ${t.blueText}`}>
-              {sortedMatches.filter(m => m.winMethod === 'ko' || (m.scores?.a === 0 && m.scores?.b === 0)).length}
+              {sortedMatches.filter(m => isKnockout(m)).length}
             </p>
             <p className={`text-xs sm:text-sm ${t.textMuted}`}>KOs</p>
           </div>
           <div>
             <p className={`text-2xl sm:text-3xl font-bold ${t.text}`}>
-              {sortedMatches.filter(m => m.winMethod !== 'ko' && !(m.scores?.a === 0 && m.scores?.b === 0)).length}
+              {sortedMatches.filter(m => !isKnockout(m)).length}
             </p>
             <p className={`text-xs sm:text-sm ${t.textMuted}`}>Decisions</p>
           </div>
@@ -844,7 +1027,7 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
                       {formatTime(match.completedAt)}
                     </span>
                   )}
-                  {match.winMethod === 'ko' || (match.scores?.a === 0 && match.scores?.b === 0) ? (
+                  {isKnockout(match) ? (
                     <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.koBg} ${t.koText}`}>KO</span>
                   ) : (
                     <span className={`text-sm font-mono ${t.textMuted}`}>
@@ -920,10 +1103,36 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringC
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState(null);
   const [error, setError] = useState(null);
+  const [judgeStatus, setJudgeStatus] = useState({ judges: {}, judgeCount: 0 });
+  
+  // Poll for judge status every 3 seconds
+  useEffect(() => {
+    if (!selectedMatch) return;
+
+    const fetchJudgeStatus = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/matches/${selectedMatch.challongeId}/scores/details?tournamentId=${selectedMatch.tournamentUrl || ''}`);
+        if (response.ok) {
+          const data = await response.json();
+          setJudgeStatus(data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch judge status:', err);
+      }
+    };
+
+    fetchJudgeStatus();
+    const interval = setInterval(fetchJudgeStatus, 3000);
+    return () => clearInterval(interval);
+  }, [selectedMatch]);
   
   // Calculate totals dynamically
   const totalA = criteria.reduce((sum, c) => sum + (scores[c.id] || 0), 0);
   const totalB = totalMaxPoints - totalA;
+  
+  // Get submitted judges info
+  const submittedJudges = Object.keys(judgeStatus.judges || {});
+  const waitingOn = ['judge_1', 'judge_2', 'judge_3'].filter(j => !submittedJudges.includes(j));
 
   const handleMatchChange = (matchKey) => {
     setSelectedMatchKey(matchKey);
@@ -1059,16 +1268,41 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringC
             </div>
           </div>
           <div className="text-right">
-            <span className={`text-xs ${t.textFaint}`}>Judges</span>
+            <span className={`text-xs ${t.textFaint}`}>Judges ({submittedJudges.length}/3)</span>
             <div className="flex gap-1 justify-end mt-1">
-              {[0, 1, 2].map(i => (
-                <div key={i} className={`w-3 h-3 sm:w-2.5 sm:h-2.5 rounded-full ${
-                  submitResult ? (i < submitResult.judgeCount ? 'bg-green-500' : t.tickMark) : t.tickMark
-                }`} />
-              ))}
+              {[1, 2, 3].map(num => {
+                const judgeId = `judge_${num}`;
+                const hasJudgeSubmitted = submittedJudges.includes(judgeId);
+                const isCurrentJudge = currentUser?.id === judgeId;
+                return (
+                  <div 
+                    key={num} 
+                    className={`w-6 h-6 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-xs font-bold ${
+                      hasJudgeSubmitted 
+                        ? 'bg-green-500 text-white' 
+                        : isCurrentJudge 
+                          ? 'bg-amber-100 text-amber-700 border-2 border-amber-400'
+                          : `${t.tableBg} ${t.textMuted}`
+                    }`}
+                    title={`Judge ${num}${hasJudgeSubmitted ? ' (submitted)' : isCurrentJudge ? ' (you)' : ''}`}
+                  >
+                    {hasJudgeSubmitted ? '✓' : num}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
+        
+        {/* Waiting indicator */}
+        {waitingOn.length > 0 && waitingOn.length < 3 && !hasSubmitted && (
+          <div className={`mb-4 p-2 rounded-lg ${t.tableBg} flex items-center justify-center gap-2`}>
+            <div className="animate-pulse w-2 h-2 rounded-full bg-amber-500"></div>
+            <span className={`text-xs sm:text-sm ${t.textMuted}`}>
+              Waiting on {waitingOn.map(j => `Judge ${j.split('_')[1]}`).join(', ')}
+            </span>
+          </div>
+        )}
         
         <div className="grid grid-cols-3 items-center gap-2 sm:gap-4">
           <div className="text-center">
@@ -1999,6 +2233,7 @@ export default function TournamentJudgingApp() {
           <PublicBracketView 
             tournaments={tournaments} 
             onMatchClick={setSelectedMatch} 
+            robotImages={robotImages}
             theme={theme} 
           />
         )}
