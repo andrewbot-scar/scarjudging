@@ -725,6 +725,223 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, theme }) =>
   );
 };
 
+// Upcoming Matches View - Shows next matches with repair countdown timers
+const UpcomingMatchesView = ({ tournaments, robotImages, theme }) => {
+  const t = themes[theme];
+  const [now, setNow] = useState(new Date());
+  
+  // Update time every second for countdown
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Get all completed matches to track when robots last fought
+  const allCompletedMatches = tournaments.flatMap(tourney => 
+    (tourney.matches || []).filter(m => m.status === 'completed')
+  );
+  
+  // Build a map of robot name -> last fight end time
+  const robotLastFight = {};
+  allCompletedMatches.forEach(match => {
+    if (match.completedAt) {
+      const time = new Date(match.completedAt).getTime();
+      if (match.competitorA) {
+        if (!robotLastFight[match.competitorA] || time > robotLastFight[match.competitorA]) {
+          robotLastFight[match.competitorA] = time;
+        }
+      }
+      if (match.competitorB) {
+        if (!robotLastFight[match.competitorB] || time > robotLastFight[match.competitorB]) {
+          robotLastFight[match.competitorB] = time;
+        }
+      }
+    }
+  });
+  
+  // Get upcoming matches (pending or active with both competitors known)
+  const upcomingMatches = tournaments.flatMap(tourney => 
+    (tourney.matches || []).filter(m => 
+      (m.status === 'pending' || m.status === 'active') && 
+      m.competitorA && 
+      m.competitorB
+    )
+  );
+  
+  // Sort by match number, then take first 10
+  const sortedUpcoming = [...upcomingMatches]
+    .sort((a, b) => a.matchNum - b.matchNum)
+    .slice(0, 10);
+  
+  // Calculate repair time remaining (20 minutes = 1200000ms)
+  const REPAIR_TIME_MS = 20 * 60 * 1000;
+  
+  const getRepairStatus = (robotName) => {
+    const lastFight = robotLastFight[robotName];
+    if (!lastFight) return { ready: true, remaining: 0 };
+    
+    const elapsed = now.getTime() - lastFight;
+    const remaining = REPAIR_TIME_MS - elapsed;
+    
+    return {
+      ready: remaining <= 0,
+      remaining: Math.max(0, remaining)
+    };
+  };
+  
+  const formatCountdown = (ms) => {
+    if (ms <= 0) return 'Ready';
+    const minutes = Math.floor(ms / 60000);
+    const seconds = Math.floor((ms % 60000) / 1000);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+  
+  if (sortedUpcoming.length === 0) {
+    return (
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-6 sm:p-8 text-center`}>
+        <div className={`w-16 h-16 mx-auto rounded-full ${t.tableBg} flex items-center justify-center mb-4`}>
+          <svg className={`w-8 h-8 ${t.textFaint}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h3 className={`text-lg font-bold ${t.text} mb-2`}>No Upcoming Matches</h3>
+        <p className={t.textMuted}>Waiting for matches to be scheduled.</p>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-4`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className={`text-lg font-bold ${t.text}`}>Upcoming Matches</h2>
+            <p className={`text-sm ${t.textMuted}`}>20 minute repair time countdown</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded border-2 border-green-500 bg-green-500/20"></div>
+              <span className={`text-xs ${t.textMuted}`}>Ready</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded border-2 border-red-500 bg-red-500/20"></div>
+              <span className={`text-xs ${t.textMuted}`}>Repairing</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Matches List */}
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} overflow-hidden`}>
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+          {sortedUpcoming.map((match, index) => {
+            const statusA = getRepairStatus(match.competitorA);
+            const statusB = getRepairStatus(match.competitorB);
+            const bothReady = statusA.ready && statusB.ready;
+            
+            return (
+              <div 
+                key={`${match.tournamentId}-${match.id}`}
+                className={`p-4 ${match.status === 'active' ? 'bg-amber-500/10' : ''}`}
+              >
+                {/* Match header */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-sm font-mono ${t.textFaint}`}>#{index + 1}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded ${t.tableBg} ${t.textMuted}`}>
+                      M{match.matchNum}
+                    </span>
+                    <span className={`text-xs ${t.textFaint}`}>{match.tournamentName}</span>
+                  </div>
+                  {match.status === 'active' ? (
+                    <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">
+                      ● NOW FIGHTING
+                    </span>
+                  ) : bothReady ? (
+                    <span className="px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">
+                      ✓ Ready
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">
+                      ⏱ Repairing
+                    </span>
+                  )}
+                </div>
+                
+                {/* Competitors */}
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Competitor A */}
+                  <div className="flex items-center gap-3">
+                    <div className={`w-16 h-16 rounded-lg overflow-hidden border-4 ${
+                      statusA.ready ? 'border-green-500' : 'border-red-500'
+                    }`}>
+                      {robotImages?.[match.competitorA] ? (
+                        <img 
+                          src={robotImages[match.competitorA]} 
+                          alt={match.competitorA}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-blue-100 flex items-center justify-center">
+                          <span className="text-xl font-bold text-blue-600">{match.competitorA?.[0]}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className={`font-semibold ${t.text}`}>{match.competitorA}</p>
+                      {!statusA.ready && (
+                        <p className="text-red-500 font-mono text-sm">{formatCountdown(statusA.remaining)}</p>
+                      )}
+                      {statusA.ready && robotLastFight[match.competitorA] && (
+                        <p className="text-green-500 text-xs">✓ Ready</p>
+                      )}
+                      {!robotLastFight[match.competitorA] && (
+                        <p className={`text-xs ${t.textFaint}`}>No recent fight</p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* Competitor B */}
+                  <div className="flex items-center gap-3 justify-end text-right">
+                    <div>
+                      <p className={`font-semibold ${t.text}`}>{match.competitorB}</p>
+                      {!statusB.ready && (
+                        <p className="text-red-500 font-mono text-sm">{formatCountdown(statusB.remaining)}</p>
+                      )}
+                      {statusB.ready && robotLastFight[match.competitorB] && (
+                        <p className="text-green-500 text-xs">✓ Ready</p>
+                      )}
+                      {!robotLastFight[match.competitorB] && (
+                        <p className={`text-xs ${t.textFaint}`}>No recent fight</p>
+                      )}
+                    </div>
+                    <div className={`w-16 h-16 rounded-lg overflow-hidden border-4 ${
+                      statusB.ready ? 'border-green-500' : 'border-red-500'
+                    }`}>
+                      {robotImages?.[match.competitorB] ? (
+                        <img 
+                          src={robotImages[match.competitorB]} 
+                          alt={match.competitorB}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-red-100 flex items-center justify-center">
+                          <span className="text-xl font-bold text-red-600">{match.competitorB?.[0]}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Completed Matches View
 const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme }) => {
   const t = themes[theme];
@@ -1951,6 +2168,12 @@ export default function TournamentJudgingApp() {
                   }`}>
                   Bracket
                 </button>
+                <button onClick={() => setView('upcoming')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    view === 'upcoming' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  }`}>
+                  Upcoming
+                </button>
                 <button onClick={() => setView('completed')}
                   className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                     view === 'completed' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
@@ -2136,6 +2359,14 @@ export default function TournamentJudgingApp() {
           <PublicBracketView 
             tournaments={tournaments} 
             onMatchClick={setSelectedMatch} 
+            robotImages={robotImages}
+            theme={theme} 
+          />
+        )}
+
+        {!isLoading && view === 'upcoming' && (
+          <UpcomingMatchesView 
+            tournaments={tournaments} 
             robotImages={robotImages}
             theme={theme} 
           />
