@@ -799,9 +799,17 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, theme })
     )
   );
   
-  // Sort by match number, then take first 10
+  // Sort: NOW FIGHTING first, then by match number, then take first 10
   const sortedUpcoming = [...upcomingMatches]
-    .sort((a, b) => a.matchNum - b.matchNum)
+    .sort((a, b) => {
+      // NOW FIGHTING matches go first
+      const aFighting = isNowFighting(a);
+      const bFighting = isNowFighting(b);
+      if (aFighting && !bFighting) return -1;
+      if (bFighting && !aFighting) return 1;
+      // Then sort by match number
+      return a.matchNum - b.matchNum;
+    })
     .slice(0, 10);
   
   // Calculate repair time remaining (20 minutes = 1200000ms)
