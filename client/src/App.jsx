@@ -15,6 +15,23 @@ const DEFAULT_SCORING_CRITERIA = [
   { id: 'control', name: 'Control', points: 3 },
 ];
 
+// Helper for case-insensitive robot image lookup
+// Handles mismatches between Challonge names and RCE names (e.g., "Briklit" vs "briklit")
+function getRobotImage(robotImages, robotName) {
+  if (!robotImages || !robotName) return null;
+  
+  // Try exact match first
+  if (robotImages[robotName]) return robotImages[robotName];
+  
+  // Try case-insensitive match
+  const lowerName = robotName.toLowerCase();
+  for (const [key, value] of Object.entries(robotImages)) {
+    if (key.toLowerCase() === lowerName) return value;
+  }
+  
+  return null;
+}
+
 // Helper to get URL parameters
 function getUrlParam(param) {
   const urlParams = new URLSearchParams(window.location.search);
@@ -370,9 +387,9 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
           <div className="grid grid-cols-3 items-center gap-4">
             <div className="text-center">
               <div className={`w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-lg overflow-hidden mb-2 ${match.winner === match.competitorA ? 'ring-2 ring-green-500' : ''}`}>
-                {robotImages?.[match.competitorA] ? (
+                {getRobotImage(robotImages, match.competitorA) ? (
                   <img 
-                    src={robotImages[match.competitorA]} 
+                    src={getRobotImage(robotImages, match.competitorA)} 
                     alt={match.competitorA}
                     className="w-full h-full object-cover"
                     onError={(e) => {
@@ -381,7 +398,7 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
                     }}
                   />
                 ) : null}
-                <div className={`w-full h-full bg-blue-100 border border-blue-200 items-center justify-center ${robotImages?.[match.competitorA] ? 'hidden' : 'flex'}`}>
+                <div className={`w-full h-full bg-blue-100 border border-blue-200 items-center justify-center ${getRobotImage(robotImages, match.competitorA) ? 'hidden' : 'flex'}`}>
                   <span className="text-2xl sm:text-3xl font-bold text-blue-600">{match.competitorA?.[0] || '?'}</span>
                 </div>
               </div>
@@ -395,9 +412,9 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
             </div>
             <div className="text-center">
               <div className={`w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-lg overflow-hidden mb-2 ${match.winner === match.competitorB ? 'ring-2 ring-green-500' : ''}`}>
-                {robotImages?.[match.competitorB] ? (
+                {getRobotImage(robotImages, match.competitorB) ? (
                   <img 
-                    src={robotImages[match.competitorB]} 
+                    src={getRobotImage(robotImages, match.competitorB)} 
                     alt={match.competitorB}
                     className="w-full h-full object-cover"
                     onError={(e) => {
@@ -406,7 +423,7 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
                     }}
                   />
                 ) : null}
-                <div className={`w-full h-full bg-red-100 border border-red-200 items-center justify-center ${robotImages?.[match.competitorB] ? 'hidden' : 'flex'}`}>
+                <div className={`w-full h-full bg-red-100 border border-red-200 items-center justify-center ${getRobotImage(robotImages, match.competitorB) ? 'hidden' : 'flex'}`}>
                   <span className="text-2xl sm:text-3xl font-bold text-red-600">{match.competitorB?.[0] || '?'}</span>
                 </div>
               </div>
@@ -494,7 +511,7 @@ const getCompetitorDisplay = (competitor, source) => {
 
 // Robot Avatar Component - displays robot image or fallback initial
 const RobotAvatar = ({ name, robotImages, size = 'md', colorClass = 'bg-gray-100 text-gray-600' }) => {
-  const imageUrl = robotImages?.[name];
+  const imageUrl = getRobotImage(robotImages, name);
   const sizeClasses = {
     sm: 'w-8 h-8 text-sm',
     md: 'w-12 h-12 text-lg',
@@ -971,9 +988,9 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, theme })
                     <div className={`w-16 h-16 rounded-lg overflow-hidden border-4 ${
                       statusA.ready ? 'border-green-500' : 'border-red-500'
                     }`}>
-                      {robotImages?.[match.competitorA] ? (
+                      {getRobotImage(robotImages, match.competitorA) ? (
                         <img 
-                          src={robotImages[match.competitorA]} 
+                          src={getRobotImage(robotImages, match.competitorA)} 
                           alt={match.competitorA}
                           className="w-full h-full object-cover"
                         />
@@ -1014,9 +1031,9 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, theme })
                     <div className={`w-16 h-16 rounded-lg overflow-hidden border-4 ${
                       statusB.ready ? 'border-green-500' : 'border-red-500'
                     }`}>
-                      {robotImages?.[match.competitorB] ? (
+                      {getRobotImage(robotImages, match.competitorB) ? (
                         <img 
-                          src={robotImages[match.competitorB]} 
+                          src={getRobotImage(robotImages, match.competitorB)} 
                           alt={match.competitorB}
                           className="w-full h-full object-cover"
                         />
@@ -1474,9 +1491,9 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
         <div className="grid grid-cols-3 items-center gap-2 sm:gap-4">
           <div className="text-center">
             <div className="w-24 h-24 sm:w-28 sm:h-28 mx-auto rounded-lg overflow-hidden mb-1 sm:mb-2">
-              {robotImages?.[selectedMatch.competitorA] ? (
+              {getRobotImage(robotImages, selectedMatch.competitorA) ? (
                 <img 
-                  src={robotImages[selectedMatch.competitorA]} 
+                  src={getRobotImage(robotImages, selectedMatch.competitorA)} 
                   alt={selectedMatch.competitorA}
                   className="w-full h-full object-cover"
                   onError={(e) => {
@@ -1485,7 +1502,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
                   }}
                 />
               ) : null}
-              <div className={`w-full h-full bg-blue-100 border border-blue-200 items-center justify-center ${robotImages?.[selectedMatch.competitorA] ? 'hidden' : 'flex'}`}>
+              <div className={`w-full h-full bg-blue-100 border border-blue-200 items-center justify-center ${getRobotImage(robotImages, selectedMatch.competitorA) ? 'hidden' : 'flex'}`}>
                 <span className="text-3xl sm:text-4xl font-bold text-blue-600">{selectedMatch.competitorA?.[0] || '?'}</span>
               </div>
             </div>
@@ -1497,9 +1514,9 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
           </div>
           <div className="text-center">
             <div className="w-24 h-24 sm:w-28 sm:h-28 mx-auto rounded-lg overflow-hidden mb-1 sm:mb-2">
-              {robotImages?.[selectedMatch.competitorB] ? (
+              {getRobotImage(robotImages, selectedMatch.competitorB) ? (
                 <img 
-                  src={robotImages[selectedMatch.competitorB]} 
+                  src={getRobotImage(robotImages, selectedMatch.competitorB)} 
                   alt={selectedMatch.competitorB}
                   className="w-full h-full object-cover"
                   onError={(e) => {
@@ -1508,7 +1525,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
                   }}
                 />
               ) : null}
-              <div className={`w-full h-full bg-red-100 border border-red-200 items-center justify-center ${robotImages?.[selectedMatch.competitorB] ? 'hidden' : 'flex'}`}>
+              <div className={`w-full h-full bg-red-100 border border-red-200 items-center justify-center ${getRobotImage(robotImages, selectedMatch.competitorB) ? 'hidden' : 'flex'}`}>
                 <span className="text-3xl sm:text-4xl font-bold text-red-600">{selectedMatch.competitorB?.[0] || '?'}</span>
               </div>
             </div>
