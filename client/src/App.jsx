@@ -754,6 +754,7 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, theme }) =>
 const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, theme }) => {
   const t = themes[theme];
   const [now, setNow] = useState(new Date());
+  const [selectedTournament, setSelectedTournament] = useState('all');
   
   // Update time every second for countdown
   useEffect(() => {
@@ -799,8 +800,13 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, theme })
     )
   );
   
+  // Filter by selected tournament
+  const filteredMatches = selectedTournament === 'all' 
+    ? upcomingMatches 
+    : upcomingMatches.filter(m => m.tournamentUrl === selectedTournament);
+  
   // Sort: NOW FIGHTING first, then by match number, then take first 10
-  const sortedUpcoming = [...upcomingMatches]
+  const sortedUpcoming = [...filteredMatches]
     .sort((a, b) => {
       // NOW FIGHTING matches go first
       const aFighting = isNowFighting(a);
@@ -853,7 +859,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, theme })
     <div className="space-y-4">
       {/* Header */}
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-4`}>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h2 className={`text-lg font-bold ${t.text}`}>Upcoming Matches</h2>
             <p className={`text-sm ${t.textMuted}`}>20 minute repair time countdown</p>
@@ -869,6 +875,41 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, theme })
             </div>
           </div>
         </div>
+        
+        {/* Tournament Filter */}
+        {tournaments.length > 1 && (
+          <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setSelectedTournament('all')}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  selectedTournament === 'all'
+                    ? 'bg-blue-600 text-white'
+                    : `${t.tableBg} ${t.textMuted} hover:${t.text}`
+                }`}
+              >
+                All ({upcomingMatches.length})
+              </button>
+              {tournaments.map(tourney => {
+                const count = upcomingMatches.filter(m => m.tournamentUrl === tourney.tournament.url).length;
+                if (count === 0) return null;
+                return (
+                  <button
+                    key={tourney.tournament.url}
+                    onClick={() => setSelectedTournament(tourney.tournament.url)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      selectedTournament === tourney.tournament.url
+                        ? 'bg-blue-600 text-white'
+                        : `${t.tableBg} ${t.textMuted} hover:${t.text}`
+                    }`}
+                  >
+                    {tourney.tournament.name} ({count})
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
       
       {/* Matches List */}
