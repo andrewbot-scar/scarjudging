@@ -805,19 +805,6 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, theme })
     ? upcomingMatches 
     : upcomingMatches.filter(m => m.tournamentUrl === selectedTournament);
   
-  // Sort: NOW FIGHTING first, then by match number, then take first 10
-  const sortedUpcoming = [...filteredMatches]
-    .sort((a, b) => {
-      // NOW FIGHTING matches go first
-      const aFighting = isNowFighting(a);
-      const bFighting = isNowFighting(b);
-      if (aFighting && !bFighting) return -1;
-      if (bFighting && !aFighting) return 1;
-      // Then sort by match number
-      return a.matchNum - b.matchNum;
-    })
-    .slice(0, 10);
-  
   // Calculate repair time remaining (20 minutes = 1200000ms)
   const REPAIR_TIME_MS = 20 * 60 * 1000;
   
@@ -833,6 +820,33 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, theme })
       remaining: Math.max(0, remaining)
     };
   };
+  
+  // Helper to check if both robots in a match are ready (On Deck)
+  const isBothReady = (match) => {
+    const statusA = getRepairStatus(match.competitorA);
+    const statusB = getRepairStatus(match.competitorB);
+    return statusA.ready && statusB.ready;
+  };
+
+  // Sort: NOW FIGHTING first, then On Deck (both ready), then by match number
+  const sortedUpcoming = [...filteredMatches]
+    .sort((a, b) => {
+      // NOW FIGHTING matches go first
+      const aFighting = isNowFighting(a);
+      const bFighting = isNowFighting(b);
+      if (aFighting && !bFighting) return -1;
+      if (bFighting && !aFighting) return 1;
+      
+      // On Deck (both robots ready) goes next
+      const aReady = isBothReady(a);
+      const bReady = isBothReady(b);
+      if (aReady && !bReady) return -1;
+      if (bReady && !aReady) return 1;
+      
+      // Then sort by match number
+      return a.matchNum - b.matchNum;
+    })
+    .slice(0, 10);
   
   const formatCountdown = (ms) => {
     if (ms <= 0) return 'Ready';
