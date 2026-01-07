@@ -97,6 +97,31 @@ const api = {
     if (!response.ok) throw new Error('Failed to scrape RCE page');
     return response.json();
   },
+
+  // Active Match API
+  async getActiveMatches(eventId) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/active-matches`);
+    if (!response.ok) throw new Error('Failed to fetch active matches');
+    return response.json();
+  },
+
+  async setActiveMatch(eventId, tournamentId, matchId) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/active-match`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tournamentId, matchId }),
+    });
+    if (!response.ok) throw new Error('Failed to set active match');
+    return response.json();
+  },
+
+  async clearActiveMatch(eventId, tournamentId) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/active-match/${tournamentId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('Failed to clear active match');
+    return response.json();
+  },
 };
 
 // Theme configurations
@@ -726,7 +751,7 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, theme }) =>
 };
 
 // Upcoming Matches View - Shows next matches with repair countdown timers
-const UpcomingMatchesView = ({ tournaments, robotImages, theme }) => {
+const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, theme }) => {
   const t = themes[theme];
   const [now, setNow] = useState(new Date());
   
@@ -758,6 +783,12 @@ const UpcomingMatchesView = ({ tournaments, robotImages, theme }) => {
       }
     }
   });
+  
+  // Helper to check if a match is the active "NOW FIGHTING" match
+  const isNowFighting = (match) => {
+    const activeMatch = activeMatches?.[match.tournamentUrl];
+    return activeMatch?.matchId === String(match.challongeId);
+  };
   
   // Get upcoming matches (pending or active with both competitors known)
   const upcomingMatches = tournaments.flatMap(tourney => 
@@ -839,11 +870,12 @@ const UpcomingMatchesView = ({ tournaments, robotImages, theme }) => {
             const statusA = getRepairStatus(match.competitorA);
             const statusB = getRepairStatus(match.competitorB);
             const bothReady = statusA.ready && statusB.ready;
+            const fighting = isNowFighting(match);
             
             return (
               <div 
                 key={`${match.tournamentId}-${match.id}`}
-                className={`p-4 ${match.status === 'active' ? 'bg-amber-500/10' : ''}`}
+                className={`p-4 ${fighting ? 'bg-amber-500/10' : ''}`}
               >
                 {/* Match header */}
                 <div className="flex items-center justify-between mb-3">
@@ -854,13 +886,13 @@ const UpcomingMatchesView = ({ tournaments, robotImages, theme }) => {
                     </span>
                     <span className={`text-xs ${t.textFaint}`}>{match.tournamentName}</span>
                   </div>
-                  {match.status === 'active' ? (
+                  {fighting ? (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">
                       ● NOW FIGHTING
                     </span>
                   ) : bothReady ? (
-                    <span className="px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">
-                      ✓ Ready
+                    <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-700">
+                      On Deck
                     </span>
                   ) : (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">
@@ -1097,12 +1129,18 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
 };
 
 // Judge Scoring View
-const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringCriteria, robotImages, theme }) => {
+const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartMatch, onEndMatch, scoringCriteria, robotImages, activeMatches, eventId, theme }) => {
   const t = themes[theme];
   
   // Use provided criteria or default
   const criteria = scoringCriteria || DEFAULT_SCORING_CRITERIA;
   const totalMaxPoints = criteria.reduce((sum, c) => sum + c.points, 0);
+  
+  // Helper to check if a match is currently fighting
+  const isMatchFighting = (match) => {
+    const activeMatch = activeMatches?.[match.tournamentUrl];
+    return activeMatch?.matchId === String(match.challongeId);
+  };
   
   const allScorableMatches = tournaments.flatMap(tourney => 
     (tourney.matches || []).filter(m => 
@@ -1336,6 +1374,29 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, scoringC
             </div>
           </div>
         </div>
+        
+        {/* Start/End Match Button */}
+        {eventId && (
+          <div className="mt-3 mb-3">
+            {isMatchFighting(selectedMatch) ? (
+              <button
+                onClick={() => onEndMatch && onEndMatch(selectedMatch.tournamentUrl)}
+                className="w-full py-2 px-4 rounded-lg bg-red-600 hover:bg-red-700 text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+              >
+                <span className="w-2 h-2 rounded-full bg-white"></span>
+                End Match (Stop Fighting)
+              </button>
+            ) : (
+              <button
+                onClick={() => onStartMatch && onStartMatch(selectedMatch.tournamentUrl, selectedMatch.challongeId)}
+                className="w-full py-2 px-4 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+              >
+                <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+                Start Match (Now Fighting)
+              </button>
+            )}
+          </div>
+        )}
         
         {/* Waiting indicator */}
         {waitingOn.length > 0 && waitingOn.length < 3 && !hasSubmitted && (
@@ -2011,6 +2072,7 @@ export default function TournamentJudgingApp() {
   const [tournaments, setTournaments] = useState([]);
   const [scoringCriteria, setScoringCriteria] = useState(DEFAULT_SCORING_CRITERIA);
   const [robotImages, setRobotImages] = useState({});
+  const [activeMatches, setActiveMatches] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [eventLoaded, setEventLoaded] = useState(false);
@@ -2030,6 +2092,28 @@ export default function TournamentJudgingApp() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.DARK_MODE, JSON.stringify(darkMode));
   }, [darkMode]);
+
+  // Load active matches when event is loaded
+  const loadActiveMatches = useCallback(async () => {
+    if (!eventId) return;
+    try {
+      const matches = await api.getActiveMatches(eventId);
+      setActiveMatches(matches);
+    } catch (err) {
+      console.error('Failed to load active matches:', err);
+    }
+  }, [eventId]);
+
+  // Poll for active matches every 5 seconds on spectator site
+  useEffect(() => {
+    if (!eventId) return;
+    
+    loadActiveMatches();
+    
+    // Poll more frequently on spectator site for real-time updates
+    const interval = setInterval(loadActiveMatches, isSpectatorDomain ? 3000 : 10000);
+    return () => clearInterval(interval);
+  }, [eventId, loadActiveMatches, isSpectatorDomain]);
 
   useEffect(() => {
     const loadEventFromUrl = async () => {
@@ -2121,8 +2205,34 @@ export default function TournamentJudgingApp() {
   };
 
   const handleScoreSubmitted = useCallback((result) => {
+    // When match is finalized, clear the active match and refresh
+    if (result.finalized) {
+      loadActiveMatches();
+    }
     setTimeout(() => loadAllTournaments(), 1000);
-  }, [loadAllTournaments]);
+  }, [loadAllTournaments, loadActiveMatches]);
+
+  // Start a match (mark as "Now Fighting")
+  const handleStartMatch = async (tournamentId, matchId) => {
+    if (!eventId) return;
+    try {
+      await api.setActiveMatch(eventId, tournamentId, String(matchId));
+      await loadActiveMatches();
+    } catch (err) {
+      console.error('Failed to start match:', err);
+    }
+  };
+
+  // End a match (clear "Now Fighting" status)
+  const handleEndMatch = async (tournamentId) => {
+    if (!eventId) return;
+    try {
+      await api.clearActiveMatch(eventId, tournamentId);
+      await loadActiveMatches();
+    } catch (err) {
+      console.error('Failed to end match:', err);
+    }
+  };
 
   const availableJudges = [
     { id: 'judge_1', name: 'Judge 1' },
@@ -2368,6 +2478,7 @@ export default function TournamentJudgingApp() {
           <UpcomingMatchesView 
             tournaments={tournaments} 
             robotImages={robotImages}
+            activeMatches={activeMatches}
             theme={theme} 
           />
         )}
@@ -2386,8 +2497,12 @@ export default function TournamentJudgingApp() {
             tournaments={tournaments}
             currentUser={currentUser}
             onScoreSubmitted={handleScoreSubmitted}
+            onStartMatch={handleStartMatch}
+            onEndMatch={handleEndMatch}
             scoringCriteria={scoringCriteria}
             robotImages={robotImages}
+            activeMatches={activeMatches}
+            eventId={eventId}
             theme={theme} 
           />
         )}
