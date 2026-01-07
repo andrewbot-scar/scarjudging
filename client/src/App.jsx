@@ -176,7 +176,7 @@ const themes = {
   dark: {
     bg: 'bg-gray-900',
     card: 'bg-gray-800',
-    cardBorder: 'border-gray-700',
+    cardBorder: 'border-gray-700/50',
     text: 'text-white',
     textMuted: 'text-gray-400',
     textFaint: 'text-gray-500',
@@ -186,7 +186,7 @@ const themes = {
     hoverBg: 'hover:bg-gray-700',
     activeBg: 'bg-gray-700',
     tableBg: 'bg-gray-700/50',
-    divider: 'border-gray-700',
+    divider: 'border-gray-700/50',
     winnerBg: 'bg-green-900/30',
     winnerText: 'text-green-400',
     pendingBg: 'bg-gray-700',
@@ -2349,8 +2349,15 @@ export default function TournamentJudgingApp() {
       {isSpectatorDomain ? (
         <header className={`${t.headerBg} border-b ${t.divider} sticky top-0 z-40`}>
           <div className="max-w-full mx-auto px-4">
-            <div className="flex justify-between items-center h-12">
-              {/* Minimal nav for spectator domain */}
+            {/* Event name on its own line */}
+            {eventName && (
+              <div className={`text-center py-2 border-b ${t.divider}`}>
+                <h1 className={`font-bold ${t.text} text-lg`}>{eventName}</h1>
+              </div>
+            )}
+            {/* Navigation row */}
+            <div className="flex justify-between items-center h-10">
+              {/* Nav tabs */}
               <nav className="flex items-center gap-2">
                 <button onClick={() => setView('public')}
                   className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
@@ -2371,11 +2378,6 @@ export default function TournamentJudgingApp() {
                   Completed
                 </button>
               </nav>
-              
-              {/* Event name in center */}
-              <div className="flex items-center gap-2">
-                {eventName && <span className={`font-bold ${t.text}`}>{eventName}</span>}
-              </div>
               
               {/* Dark mode toggle */}
               <button onClick={() => setDarkMode(!darkMode)}
