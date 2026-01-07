@@ -1938,7 +1938,51 @@ export default function TournamentJudgingApp() {
   
   return (
     <div className={`min-h-screen ${t.bg} transition-colors`}>
-      <header className={`${t.headerBg} border-b ${t.divider} sticky top-0 z-40`}>
+      {/* Header - simplified on spectator domain */}
+      {isSpectatorDomain ? (
+        <header className={`${t.headerBg} border-b ${t.divider} sticky top-0 z-40`}>
+          <div className="max-w-full mx-auto px-4">
+            <div className="flex justify-between items-center h-12">
+              {/* Minimal nav for spectator domain */}
+              <nav className="flex items-center gap-2">
+                <button onClick={() => setView('public')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    view === 'public' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  }`}>
+                  Bracket
+                </button>
+                <button onClick={() => setView('completed')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    view === 'completed' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  }`}>
+                  Completed
+                </button>
+              </nav>
+              
+              {/* Event name in center */}
+              <div className="flex items-center gap-2">
+                {eventName && <span className={`font-bold ${t.text}`}>{eventName}</span>}
+              </div>
+              
+              {/* Dark mode toggle */}
+              <button onClick={() => setDarkMode(!darkMode)}
+                className={`p-2 rounded-md ${t.textMuted} ${t.hoverBg} transition-colors`}
+                title="Toggle dark mode">
+                {darkMode ? (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+        </header>
+      ) : (
+        <header className={`${t.headerBg} border-b ${t.divider} sticky top-0 z-40`}>
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex justify-between items-center h-14">
             <div className="flex items-center gap-2 sm:gap-4">
@@ -2041,37 +2085,41 @@ export default function TournamentJudgingApp() {
           </div>
         </div>
       </header>
+      )}
       
-      {/* Event Info Bar - Mobile Responsive */}
-      <div className={`${t.headerBg} border-b ${t.divider}`}>
-        <div className="max-w-6xl mx-auto px-4 py-2 sm:py-3">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            {tournaments.length > 0 ? (
-              <>
-                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
-                  {tournaments.length} Tournament{tournaments.length !== 1 ? 's' : ''}
-                </span>
-                <h1 className={`text-base sm:text-lg font-bold ${t.text}`}>
-                  {eventName || 'SCAR Event'}
-                </h1>
-                <span className="hidden sm:inline px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded">
-                  Connected
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded">
-                  No Tournaments
-                </span>
-                <h1 className={`text-base sm:text-lg font-bold ${t.text}`}>SCAR Judge Portal</h1>
-                <span className={`hidden sm:inline text-sm ${t.textMuted}`}>Add tournaments in Admin</span>
-              </>
-            )}
+      {/* Event Info Bar - Hide on spectator domain, show elsewhere */}
+      {!isSpectatorDomain && (
+        <div className={`${t.headerBg} border-b ${t.divider}`}>
+          <div className="max-w-6xl mx-auto px-4 py-2 sm:py-3">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              {tournaments.length > 0 ? (
+                <>
+                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
+                    {tournaments.length} Tournament{tournaments.length !== 1 ? 's' : ''}
+                  </span>
+                  <h1 className={`text-base sm:text-lg font-bold ${t.text}`}>
+                    {eventName || 'SCAR Event'}
+                  </h1>
+                  <span className="hidden sm:inline px-2 py-0.5 bg-green-100 text-green-700 text-xs font-semibold rounded">
+                    Connected
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-xs font-semibold rounded">
+                    No Tournaments
+                  </span>
+                  <h1 className={`text-base sm:text-lg font-bold ${t.text}`}>SCAR Judge Portal</h1>
+                  <span className={`hidden sm:inline text-sm ${t.textMuted}`}>Add tournaments in Admin</span>
+                </>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
       
-      <main className="max-w-6xl mx-auto px-3 sm:px-4 py-4 sm:py-6">
+      {/* Main content - wider on spectator domain for TV display */}
+      <main className={`${isSpectatorDomain ? 'max-w-full px-4' : 'max-w-6xl px-3 sm:px-4'} mx-auto py-4 sm:py-6`}>
         {isLoading && (
           <div className={`${t.card} rounded-xl border ${t.cardBorder} p-8 text-center`}>
             <p className={t.text}>Loading tournament data...</p>
@@ -2135,18 +2183,21 @@ export default function TournamentJudgingApp() {
         )}
       </main>
       
-      <footer className={`border-t ${t.divider} ${t.headerBg} mt-auto`}>
-        <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4">
-          <div className={`flex flex-col sm:flex-row justify-between items-center gap-1 sm:gap-2 text-xs sm:text-sm ${t.textFaint}`}>
-            <div>Built for <a href="https://www.socalattackrobots.com/" className={t.blueText}>SCAR</a></div>
-            <div className="flex items-center gap-2 sm:gap-4">
-              <span>{tournaments.length} tournament{tournaments.length !== 1 ? 's' : ''}</span>
-              <span className="hidden sm:inline">•</span>
-              <span className="hidden sm:inline">Shareable via URL</span>
+      {/* Footer - hide on spectator domain */}
+      {!isSpectatorDomain && (
+        <footer className={`border-t ${t.divider} ${t.headerBg} mt-auto`}>
+          <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4">
+            <div className={`flex flex-col sm:flex-row justify-between items-center gap-1 sm:gap-2 text-xs sm:text-sm ${t.textFaint}`}>
+              <div>Built for <a href="https://www.socalattackrobots.com/" className={t.blueText}>SCAR</a></div>
+              <div className="flex items-center gap-2 sm:gap-4">
+                <span>{tournaments.length} tournament{tournaments.length !== 1 ? 's' : ''}</span>
+                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline">Shareable via URL</span>
+              </div>
             </div>
-          </div>
         </div>
       </footer>
+      )}
 
       {selectedMatch && (
         <MatchDetailPopup 
