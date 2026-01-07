@@ -588,12 +588,51 @@ const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) =>
 };
 
 // Match Card Component - Mobile Optimized
-const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
+const MatchCard = ({ match, onClick, showTournament = false, displayStatus, theme }) => {
   const t = themes[theme];
-  const isActive = match.status === 'active';
+  
+  // Use displayStatus if provided, otherwise fall back to basic status check
+  const status = displayStatus || (match.status === 'active' ? 'onDeck' : match.status === 'completed' ? 'completed' : 'pending');
   
   const compA = getCompetitorDisplay(match.competitorA, match.sourceA);
   const compB = getCompetitorDisplay(match.competitorB, match.sourceB);
+  
+  // Determine border styling based on display status
+  const getBorderClass = () => {
+    switch (status) {
+      case 'fighting':
+        return 'border-amber-400 ring-2 ring-amber-400/50';
+      case 'onDeck':
+        return 'border-green-500 ring-2 ring-green-500/30';
+      case 'repairing':
+        return 'border-red-500 ring-2 ring-red-500/30';
+      default:
+        return `${t.cardBorder} hover:border-gray-400`;
+    }
+  };
+  
+  // Get the appropriate status badge
+  const getStatusBadge = () => {
+    if (match.status === 'completed') {
+      // Show KO or Decision for completed matches
+      const isKO = match.winMethod === 'ko' || match.scores?.a === 0 || match.scores?.b === 0;
+      if (isKO) {
+        return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.koBg} ${t.koText}`}>KO</span>;
+      }
+      return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.decisionBg} ${t.decisionText}`}>Decision</span>;
+    }
+    
+    switch (status) {
+      case 'fighting':
+        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">● NOW FIGHTING</span>;
+      case 'onDeck':
+        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">On Deck</span>;
+      case 'repairing':
+        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">⏱ Repairing</span>;
+      default:
+        return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.pendingBg} ${t.pendingText}`}>Upcoming</span>;
+    }
+  };
   
   return (
     <div 
@@ -601,7 +640,7 @@ const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
       className={`
         ${t.card} rounded-lg border overflow-hidden cursor-pointer
         transition-all duration-200 hover:shadow-md active:scale-[0.98]
-        ${isActive ? 'border-amber-400 ring-2 ring-amber-200' : `${t.cardBorder} hover:border-gray-400`}
+        ${getBorderClass()}
       `}
     >
       <div className="p-3">
@@ -614,7 +653,7 @@ const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
             )}
             <span className={`text-xs ${t.textFaint} font-mono flex-shrink-0`}>M{match.matchNum}</span>
           </div>
-          <StatusBadge status={match.status} winMethod={match.winMethod} scores={match.scores} theme={theme} />
+          {getStatusBadge()}
         </div>
         
         <div className="space-y-1.5">
@@ -656,9 +695,77 @@ const MatchCard = ({ match, onClick, showTournament = false, theme }) => {
 };
 
 // Public Bracket View - Mobile Optimized
-const PublicBracketView = ({ tournaments, onMatchClick, robotImages, theme }) => {
+const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatches, theme }) => {
   const t = themes[theme];
   const [selectedTournamentIndex, setSelectedTournamentIndex] = useState(0);
+  const [now, setNow] = useState(new Date());
+  
+  // Update time every second for repair countdown
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Get all completed matches to track when robots last fought
+  const allCompletedMatches = tournaments.flatMap(tourney => 
+    (tourney.matches || []).filter(m => m.status === 'completed')
+  );
+  
+  // Build a map of robot name -> last fight end time
+  const robotLastFight = {};
+  allCompletedMatches.forEach(match => {
+    if (match.completedAt) {
+      const time = new Date(match.completedAt).getTime();
+      if (match.competitorA) {
+        if (!robotLastFight[match.competitorA] || time > robotLastFight[match.competitorA]) {
+          robotLastFight[match.competitorA] = time;
+        }
+      }
+      if (match.competitorB) {
+        if (!robotLastFight[match.competitorB] || time > robotLastFight[match.competitorB]) {
+          robotLastFight[match.competitorB] = time;
+        }
+      }
+    }
+  });
+  
+  // Calculate repair time remaining (20 minutes = 1200000ms)
+  const REPAIR_TIME_MS = 20 * 60 * 1000;
+  
+  const getRepairStatus = (robotName) => {
+    const lastFight = robotLastFight[robotName];
+    if (!lastFight) return { ready: true, remaining: 0 };
+    
+    const elapsed = now.getTime() - lastFight;
+    const remaining = REPAIR_TIME_MS - elapsed;
+    
+    return {
+      ready: remaining <= 0,
+      remaining: Math.max(0, remaining)
+    };
+  };
+  
+  // Helper to check if a match is the active "NOW FIGHTING" match
+  const isNowFighting = (match) => {
+    const activeMatch = activeMatches?.[match.tournamentUrl];
+    return activeMatch?.matchId === String(match.challongeId);
+  };
+  
+  // Get match status for bracket display
+  const getMatchDisplayStatus = (match) => {
+    if (match.status === 'completed') return 'completed';
+    if (isNowFighting(match)) return 'fighting';
+    
+    // Check if both competitors are known and ready
+    if (match.competitorA && match.competitorB) {
+      const statusA = getRepairStatus(match.competitorA);
+      const statusB = getRepairStatus(match.competitorB);
+      if (statusA.ready && statusB.ready) return 'onDeck';
+      return 'repairing';
+    }
+    
+    return 'pending';
+  };
   
   if (!tournaments || tournaments.length === 0) {
     return (
@@ -729,7 +836,7 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, theme }) =>
                 </p>
                 <div className="space-y-2 sm:space-y-3 flex-1 flex flex-col justify-around">
                   {roundMatches.map(match => (
-                    <MatchCard key={match.id} match={match} onClick={() => onMatchClick(match)} theme={theme} />
+                    <MatchCard key={match.id} match={match} onClick={() => onMatchClick(match)} displayStatus={getMatchDisplayStatus(match)} theme={theme} />
                   ))}
                 </div>
               </div>
@@ -754,7 +861,7 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, theme }) =>
                   </p>
                   <div className="space-y-2 sm:space-y-3 flex-1 flex flex-col justify-around">
                     {roundMatches.map(match => (
-                      <MatchCard key={match.id} match={match} onClick={() => onMatchClick(match)} theme={theme} />
+                      <MatchCard key={match.id} match={match} onClick={() => onMatchClick(match)} displayStatus={getMatchDisplayStatus(match)} theme={theme} />
                     ))}
                   </div>
                 </div>
@@ -2552,6 +2659,7 @@ export default function TournamentJudgingApp() {
             tournaments={tournaments} 
             onMatchClick={setSelectedMatch} 
             robotImages={robotImages}
+            activeMatches={activeMatches}
             theme={theme} 
           />
         )}
