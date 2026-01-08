@@ -139,6 +139,31 @@ const api = {
     if (!response.ok) throw new Error('Failed to clear active match');
     return response.json();
   },
+
+  // Repair Timer Reset API
+  async getRepairResets(eventId) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/repair-resets`);
+    if (!response.ok) throw new Error('Failed to fetch repair resets');
+    return response.json();
+  },
+
+  async resetRepairTimer(eventId, robotName) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/repair-reset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ robotName }),
+    });
+    if (!response.ok) throw new Error('Failed to reset repair timer');
+    return response.json();
+  },
+
+  async clearRepairReset(eventId, robotName) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/repair-reset/${encodeURIComponent(robotName)}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('Failed to clear repair reset');
+    return response.json();
+  },
 };
 
 // Theme configurations
@@ -695,7 +720,7 @@ const MatchCard = ({ match, onClick, showTournament = false, displayStatus, them
 };
 
 // Public Bracket View - Mobile Optimized
-const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatches, theme }) => {
+const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatches, repairResets, theme }) => {
   const t = themes[theme];
   const [selectedTournamentIndex, setSelectedTournamentIndex] = useState(0);
   const [now, setNow] = useState(new Date());
@@ -733,10 +758,25 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatch
   const REPAIR_TIME_MS = 20 * 60 * 1000;
   
   const getRepairStatus = (robotName) => {
-    const lastFight = robotLastFight[robotName];
-    if (!lastFight) return { ready: true, remaining: 0 };
+    // Check for manual reset first (case-insensitive)
+    let resetTime = null;
+    if (repairResets) {
+      for (const [key, value] of Object.entries(repairResets)) {
+        if (key.toLowerCase() === robotName?.toLowerCase()) {
+          resetTime = new Date(value).getTime();
+          break;
+        }
+      }
+    }
     
-    const elapsed = now.getTime() - lastFight;
+    const lastFight = robotLastFight[robotName];
+    
+    // Use the more recent of: last fight or manual reset
+    const effectiveStart = Math.max(lastFight || 0, resetTime || 0);
+    
+    if (!effectiveStart) return { ready: true, remaining: 0 };
+    
+    const elapsed = now.getTime() - effectiveStart;
     const remaining = REPAIR_TIME_MS - elapsed;
     
     return {
@@ -875,7 +915,7 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatch
 };
 
 // Upcoming Matches View - Shows next matches with repair countdown timers
-const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, theme }) => {
+const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairResets, theme }) => {
   const t = themes[theme];
   const [now, setNow] = useState(new Date());
   const [selectedTournament, setSelectedTournament] = useState('all');
@@ -933,10 +973,25 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, theme })
   const REPAIR_TIME_MS = 20 * 60 * 1000;
   
   const getRepairStatus = (robotName) => {
-    const lastFight = robotLastFight[robotName];
-    if (!lastFight) return { ready: true, remaining: 0 };
+    // Check for manual reset first (case-insensitive)
+    let resetTime = null;
+    if (repairResets) {
+      for (const [key, value] of Object.entries(repairResets)) {
+        if (key.toLowerCase() === robotName?.toLowerCase()) {
+          resetTime = new Date(value).getTime();
+          break;
+        }
+      }
+    }
     
-    const elapsed = now.getTime() - lastFight;
+    const lastFight = robotLastFight[robotName];
+    
+    // Use the more recent of: last fight or manual reset
+    const effectiveStart = Math.max(lastFight || 0, resetTime || 0);
+    
+    if (!effectiveStart) return { ready: true, remaining: 0 };
+    
+    const elapsed = now.getTime() - effectiveStart;
     const remaining = REPAIR_TIME_MS - elapsed;
     
     return {
@@ -1316,7 +1371,7 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
 };
 
 // Judge Scoring View
-const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartMatch, onEndMatch, scoringCriteria, robotImages, activeMatches, eventId, theme }) => {
+const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartMatch, onEndMatch, onResetRepairTimer, scoringCriteria, robotImages, activeMatches, eventId, theme }) => {
   const t = themes[theme];
   
   // Use provided criteria or default
@@ -1582,6 +1637,33 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
                 Start Match (Now Fighting)
               </button>
             )}
+          </div>
+        )}
+
+        {/* Repair Timer Reset */}
+        {eventId && onResetRepairTimer && (
+          <div className={`mb-3 p-3 rounded-lg ${t.tableBg}`}>
+            <p className={`text-xs font-semibold ${t.textFaint} uppercase tracking-wide mb-2`}>Reset Repair Timer (20 min)</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={() => onResetRepairTimer(selectedMatch.competitorA)}
+                className={`py-2 px-3 rounded-lg border ${t.cardBorder} ${t.text} text-xs font-medium ${t.hoverBg} transition-colors flex items-center justify-center gap-1`}
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {selectedMatch.competitorA}
+              </button>
+              <button
+                onClick={() => onResetRepairTimer(selectedMatch.competitorB)}
+                className={`py-2 px-3 rounded-lg border ${t.cardBorder} ${t.text} text-xs font-medium ${t.hoverBg} transition-colors flex items-center justify-center gap-1`}
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {selectedMatch.competitorB}
+              </button>
+            </div>
           </div>
         )}
         
@@ -2260,6 +2342,7 @@ export default function TournamentJudgingApp() {
   const [scoringCriteria, setScoringCriteria] = useState(DEFAULT_SCORING_CRITERIA);
   const [robotImages, setRobotImages] = useState({});
   const [activeMatches, setActiveMatches] = useState({});
+  const [repairResets, setRepairResets] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [eventLoaded, setEventLoaded] = useState(false);
@@ -2280,12 +2363,16 @@ export default function TournamentJudgingApp() {
     localStorage.setItem(STORAGE_KEYS.DARK_MODE, JSON.stringify(darkMode));
   }, [darkMode]);
 
-  // Load active matches when event is loaded
+  // Load active matches and repair resets when event is loaded
   const loadActiveMatches = useCallback(async () => {
     if (!eventId) return;
     try {
-      const matches = await api.getActiveMatches(eventId);
+      const [matches, resets] = await Promise.all([
+        api.getActiveMatches(eventId),
+        api.getRepairResets(eventId)
+      ]);
       setActiveMatches(matches);
+      setRepairResets(resets);
     } catch (err) {
       console.error('Failed to load active matches:', err);
     }
@@ -2418,6 +2505,19 @@ export default function TournamentJudgingApp() {
       await loadActiveMatches();
     } catch (err) {
       console.error('Failed to end match:', err);
+    }
+  };
+
+  // Reset a robot's repair timer (restart 20 min countdown)
+  const handleResetRepairTimer = async (robotName) => {
+    if (!eventId) return;
+    try {
+      await api.resetRepairTimer(eventId, robotName);
+      await loadActiveMatches(); // This also loads repair resets
+    } catch (err) {
+      console.error('Failed to reset repair timer:', err);
+    }
+  };
     }
   };
 
@@ -2660,6 +2760,7 @@ export default function TournamentJudgingApp() {
             onMatchClick={setSelectedMatch} 
             robotImages={robotImages}
             activeMatches={activeMatches}
+            repairResets={repairResets}
             theme={theme} 
           />
         )}
@@ -2669,6 +2770,7 @@ export default function TournamentJudgingApp() {
             tournaments={tournaments} 
             robotImages={robotImages}
             activeMatches={activeMatches}
+            repairResets={repairResets}
             theme={theme} 
           />
         )}
@@ -2689,6 +2791,7 @@ export default function TournamentJudgingApp() {
             onScoreSubmitted={handleScoreSubmitted}
             onStartMatch={handleStartMatch}
             onEndMatch={handleEndMatch}
+            onResetRepairTimer={handleResetRepairTimer}
             scoringCriteria={scoringCriteria}
             robotImages={robotImages}
             activeMatches={activeMatches}
