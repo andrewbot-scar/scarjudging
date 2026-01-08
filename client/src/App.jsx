@@ -2593,8 +2593,6 @@ export default function TournamentJudgingApp() {
       console.error('Failed to reset repair timer:', err);
     }
   };
-    }
-  };
 
   const availableJudges = [
     { id: 'judge_1', name: 'Judge 1' },
@@ -2700,7 +2698,7 @@ export default function TournamentJudgingApp() {
                 }`}>
                 Completed
               </button>
-              {!isSpectatorView && (
+              {!isSpectatorDomain && (
                 <button onClick={() => handleLogin('judge')}
                   className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                     view === 'judge' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
@@ -2730,9 +2728,9 @@ export default function TournamentJudgingApp() {
                 className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
                   view === 'completed' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
                 }`}>
-                Done
+                Completed
               </button>
-              {!isSpectatorView && (
+              {!isSpectatorDomain && (
                 <button onClick={() => handleLogin('judge')}
                   className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     view === 'judge' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
