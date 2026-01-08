@@ -1371,12 +1371,80 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
 };
 
 // Judge Scoring View
-const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartMatch, onEndMatch, onResetRepairTimer, scoringCriteria, robotImages, activeMatches, eventId, theme }) => {
+const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartMatch, onEndMatch, onResetRepairTimer, scoringCriteria, robotImages, activeMatches, repairResets, eventId, theme }) => {
   const t = themes[theme];
+  const [now, setNow] = useState(new Date());
+  
+  // Update time every second for repair status
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
   
   // Use provided criteria or default
   const criteria = scoringCriteria || DEFAULT_SCORING_CRITERIA;
   const totalMaxPoints = criteria.reduce((sum, c) => sum + c.points, 0);
+  
+  // Get all completed matches to track when robots last fought
+  const allCompletedMatches = tournaments.flatMap(tourney => 
+    (tourney.matches || []).filter(m => m.status === 'completed')
+  );
+  
+  // Build a map of robot name -> last fight end time
+  const robotLastFight = {};
+  allCompletedMatches.forEach(match => {
+    if (match.completedAt) {
+      const time = new Date(match.completedAt).getTime();
+      if (match.competitorA) {
+        if (!robotLastFight[match.competitorA] || time > robotLastFight[match.competitorA]) {
+          robotLastFight[match.competitorA] = time;
+        }
+      }
+      if (match.competitorB) {
+        if (!robotLastFight[match.competitorB] || time > robotLastFight[match.competitorB]) {
+          robotLastFight[match.competitorB] = time;
+        }
+      }
+    }
+  });
+  
+  // Calculate repair time remaining (20 minutes = 1200000ms)
+  const REPAIR_TIME_MS = 20 * 60 * 1000;
+  
+  const getRepairStatus = (robotName) => {
+    // Check for manual reset first (case-insensitive)
+    let resetTime = null;
+    if (repairResets) {
+      for (const [key, value] of Object.entries(repairResets)) {
+        if (key.toLowerCase() === robotName?.toLowerCase()) {
+          resetTime = new Date(value).getTime();
+          break;
+        }
+      }
+    }
+    
+    const lastFight = robotLastFight[robotName];
+    
+    // Use the more recent of: last fight or manual reset
+    const effectiveStart = Math.max(lastFight || 0, resetTime || 0);
+    
+    if (!effectiveStart) return { ready: true, remaining: 0 };
+    
+    const elapsed = now.getTime() - effectiveStart;
+    const remaining = REPAIR_TIME_MS - elapsed;
+    
+    return {
+      ready: remaining <= 0,
+      remaining: Math.max(0, remaining)
+    };
+  };
+  
+  // Check if both robots in a match are ready
+  const isMatchReady = (match) => {
+    const statusA = getRepairStatus(match.competitorA);
+    const statusB = getRepairStatus(match.competitorB);
+    return statusA.ready && statusB.ready;
+  };
   
   // Helper to check if a match is currently fighting
   const isMatchFighting = (match) => {
@@ -1539,6 +1607,13 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
     return acc;
   }, {});
 
+  // Get status indicator for dropdown
+  const getMatchIndicator = (match) => {
+    if (isMatchFighting(match)) return '🟡'; // Yellow for NOW FIGHTING
+    if (isMatchReady(match)) return '🟢'; // Green if both robots ready
+    return '🔴'; // Red if either robot still repairing
+  };
+
   return (
     <div className="max-w-xl mx-auto space-y-3 sm:space-y-4">
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-3 sm:p-4`}>
@@ -1554,8 +1629,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
             <optgroup key={tournamentName} label={tournamentName}>
               {matches.map(match => (
                 <option key={`${match.tournamentUrl}-${match.id}`} value={`${match.tournamentUrl}-${match.id}`}>
-                  {match.status === 'active' ? '🔴 ' : ''}
-                  M{match.matchNum}: {match.competitorA} vs {match.competitorB}
+                  {getMatchIndicator(match)} M{match.matchNum}: {match.competitorA} vs {match.competitorB}
                 </option>
               ))}
             </optgroup>
@@ -2795,6 +2869,7 @@ export default function TournamentJudgingApp() {
             scoringCriteria={scoringCriteria}
             robotImages={robotImages}
             activeMatches={activeMatches}
+            repairResets={repairResets}
             eventId={eventId}
             theme={theme} 
           />
