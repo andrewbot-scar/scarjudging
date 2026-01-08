@@ -142,9 +142,14 @@ const api = {
 
   // Repair Timer Reset API
   async getRepairResets(eventId) {
-    const response = await fetch(`${API_BASE_URL}/events/${eventId}/repair-resets`);
-    if (!response.ok) throw new Error('Failed to fetch repair resets');
-    return response.json();
+    try {
+      const response = await fetch(`${API_BASE_URL}/events/${eventId}/repair-resets`);
+      if (!response.ok) return {}; // Return empty object on error
+      return response.json();
+    } catch (err) {
+      console.error('Failed to fetch repair resets:', err);
+      return {}; // Return empty object on error
+    }
   },
 
   async resetRepairTimer(eventId, robotName) {
