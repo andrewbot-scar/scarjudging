@@ -85,6 +85,17 @@ async function initDatabase() {
       )
     `);
 
+    // Create repair_timer_resets table for manual repair timer resets
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS repair_timer_resets (
+        id SERIAL PRIMARY KEY,
+        event_id VARCHAR(255) NOT NULL,
+        robot_name VARCHAR(255) NOT NULL,
+        reset_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(event_id, robot_name)
+      )
+    `);
+
     console.log('Database tables initialized successfully');
   } catch (error) {
     console.error('Failed to initialize database:', error);
@@ -394,6 +405,100 @@ app.get('/api/events/:eventId/active-matches', async (req, res) => {
     }
   } catch (error) {
     console.error('Error getting active matches:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// REPAIR TIMER RESET ENDPOINTS
+// ============================================
+
+// In-memory fallback for repair timer resets
+const memoryRepairResets = {};
+
+// POST /api/events/:eventId/repair-reset - Reset a robot's repair timer
+app.post('/api/events/:eventId/repair-reset', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { robotName } = req.body;
+
+    if (!robotName) {
+      return res.status(400).json({ error: 'robotName is required' });
+    }
+
+    const resetAt = new Date().toISOString();
+
+    if (pool) {
+      // Use PostgreSQL - upsert
+      await pool.query(`
+        INSERT INTO repair_timer_resets (event_id, robot_name, reset_at)
+        VALUES ($1, $2, CURRENT_TIMESTAMP)
+        ON CONFLICT (event_id, robot_name)
+        DO UPDATE SET reset_at = CURRENT_TIMESTAMP
+      `, [eventId, robotName]);
+      
+      console.log(`Repair timer reset: event=${eventId}, robot=${robotName}`);
+    } else {
+      // Fallback to in-memory
+      if (!memoryRepairResets[eventId]) {
+        memoryRepairResets[eventId] = {};
+      }
+      memoryRepairResets[eventId][robotName] = resetAt;
+    }
+
+    res.json({ success: true, eventId, robotName, resetAt });
+  } catch (error) {
+    console.error('Error resetting repair timer:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /api/events/:eventId/repair-reset/:robotName - Clear a robot's repair timer reset
+app.delete('/api/events/:eventId/repair-reset/:robotName', async (req, res) => {
+  try {
+    const { eventId, robotName } = req.params;
+
+    if (pool) {
+      await pool.query(
+        'DELETE FROM repair_timer_resets WHERE event_id = $1 AND robot_name = $2',
+        [eventId, robotName]
+      );
+      console.log(`Repair timer reset cleared: event=${eventId}, robot=${robotName}`);
+    } else {
+      if (memoryRepairResets[eventId]) {
+        delete memoryRepairResets[eventId][robotName];
+      }
+    }
+
+    res.json({ success: true, message: 'Repair timer reset cleared' });
+  } catch (error) {
+    console.error('Error clearing repair timer reset:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/events/:eventId/repair-resets - Get all repair timer resets for an event
+app.get('/api/events/:eventId/repair-resets', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    if (pool) {
+      const result = await pool.query(
+        'SELECT robot_name, reset_at FROM repair_timer_resets WHERE event_id = $1',
+        [eventId]
+      );
+      
+      const resets = {};
+      result.rows.forEach(row => {
+        resets[row.robot_name] = row.reset_at;
+      });
+      
+      res.json(resets);
+    } else {
+      res.json(memoryRepairResets[eventId] || {});
+    }
+  } catch (error) {
+    console.error('Error getting repair timer resets:', error);
     res.status(500).json({ error: error.message });
   }
 });
