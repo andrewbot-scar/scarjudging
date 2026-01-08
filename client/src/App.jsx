@@ -278,7 +278,8 @@ function transformChallongeData(challongeData, tournamentUrl) {
       scores: match.scores_csv ? parseScores(match.scores_csv) : { a: 0, b: 0 },
       sourceA: sourceA,
       sourceB: sourceB,
-      completedAt: match.completed_at || null,
+      // Use updated_at as completedAt for completed matches (Challonge doesn't have a dedicated completed_at field for matches)
+      completedAt: match.state === 'complete' ? (match.completed_at || match.updated_at) : null,
       tournamentName: tournament.name,
       tournamentUrl: tournamentUrl || tournament.url,
       tournamentId: tournament.id,
