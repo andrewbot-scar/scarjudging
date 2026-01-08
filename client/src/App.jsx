@@ -291,14 +291,18 @@ function transformChallongeData(challongeData, tournamentUrl) {
     };
   });
 
-  const maxMatchNum = Math.max(...transformedMatches.map(m => m.matchNum));
+  // Find the Grand Finals match (highest round in winners bracket)
+  const maxWinnersRound = Math.max(...transformedMatches.filter(x => x.bracket === 'winners').map(x => x.round));
   const grandFinalsMatch = transformedMatches.find(m => 
-    m.bracket === 'winners' && 
-    m.round === Math.max(...transformedMatches.filter(x => x.bracket === 'winners').map(x => x.round))
+    m.bracket === 'winners' && m.round === maxWinnersRound
   );
   
+  // Filter out bracket reset matches (any match after Grand Finals)
+  // This supports "modified double elimination" where there's no bracket reset
   const filteredMatches = transformedMatches.filter(m => {
-    if (m.matchNum === maxMatchNum && !m.competitorA && !m.competitorB && grandFinalsMatch && m.matchNum > grandFinalsMatch.matchNum) {
+    // If there's a Grand Finals match, hide any matches with higher match numbers
+    // These are bracket reset matches that we don't use
+    if (grandFinalsMatch && m.matchNum > grandFinalsMatch.matchNum) {
       return false;
     }
     return true;
