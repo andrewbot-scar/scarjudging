@@ -1645,9 +1645,9 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
 
   // Get status indicator for dropdown
   const getMatchIndicator = (match) => {
-    if (isMatchFighting(match)) return 'ðŸŸ¡'; // Yellow for NOW FIGHTING
-    if (isMatchReady(match)) return 'ðŸŸ¢'; // Green if both robots ready
-    return 'ðŸ”´'; // Red if either robot still repairing
+    if (isMatchFighting(match)) return '🟡'; // Yellow for NOW FIGHTING
+    if (isMatchReady(match)) return '🟢'; // Green if both robots ready
+    return '🔴'; // Red if either robot still repairing
   };
 
   return (
@@ -1681,7 +1681,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
 
       {submitResult?.finalized && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-          <p className="text-green-700 font-semibold">ðŸ† Match Complete!</p>
+          <p className="text-green-700 font-semibold">🏆 Match Complete!</p>
           <p className={`text-sm ${t.textMuted} mt-1`}>
             Winner: {submitResult.result.winMethod === 'ko' ? 'KO' : `${submitResult.result.scoreA}-${submitResult.result.scoreB}`}
           </p>
@@ -2300,7 +2300,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                 disabled={isLoading || !newRceUrl.trim()}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
               >
-                {isLoading ? 'Loading...' : 'ðŸ“· Import'}
+                {isLoading ? 'Loading...' : '📷 Import'}
               </button>
             </div>
             <p className={`text-xs ${t.textFaint} mt-1`}>
@@ -2451,14 +2451,14 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
             disabled={isLoading || !localEventId.trim() || tournamentUrls.length === 0}
             className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'Saving...' : 'ðŸ’¾ Save Event to Server'}
+            {isLoading ? 'Saving...' : '💾 Save Event to Server'}
           </button>
 
           {localEventId && (
             <>
               {/* Judge Link */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textMuted}`}>ðŸŽ¯ Judge Link</label>
+                <label className={`block text-sm font-medium ${t.textMuted}`}>🎯 Judge Link</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -2470,7 +2470,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     onClick={handleCopyLink}
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    ðŸ“‹ Copy
+                    📋 Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
@@ -2480,7 +2480,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
 
               {/* Spectator Link - Subdomain */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textMuted}`}>ðŸ‘€ Spectator Link (Recommended)</label>
+                <label className={`block text-sm font-medium ${t.textMuted}`}>👀 Spectator Link (Recommended)</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -2495,7 +2495,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     }}
                     className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    ðŸ“‹ Copy
+                    📋 Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
@@ -2505,7 +2505,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
 
               {/* Legacy Spectator Link */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textFaint}`}>ðŸ‘€ Spectator Link (Legacy)</label>
+                <label className={`block text-sm font-medium ${t.textFaint}`}>👀 Spectator Link (Legacy)</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -2520,7 +2520,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     }}
                     className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    ðŸ“‹ Copy
+                    📋 Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
