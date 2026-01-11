@@ -229,18 +229,39 @@ async function postMatchToDiscord(webhookUrl, matchData) {
 // Helper to get event's Discord webhook URL
 async function getEventDiscordWebhook(tournamentId) {
   try {
+    console.log(`Looking for Discord webhook for tournament: ${tournamentId}`);
+    
     if (pool) {
       // Find event that contains this tournament
-      const result = await pool.query(
-        `SELECT event_id, name, discord_webhook_url, robot_images FROM events WHERE tournaments @> $1`,
+      // Try JSONB containment first
+      let result = await pool.query(
+        `SELECT event_id, name, discord_webhook_url, robot_images, tournaments FROM events WHERE tournaments @> $1::jsonb`,
         [JSON.stringify([tournamentId])]
       );
+      
+      // If no result, try a text search as fallback (in case of format mismatch)
+      if (result.rows.length === 0) {
+        console.log(`JSONB containment found no match, trying text search...`);
+        result = await pool.query(
+          `SELECT event_id, name, discord_webhook_url, robot_images, tournaments FROM events WHERE tournaments::text LIKE $1`,
+          [`%${tournamentId}%`]
+        );
+      }
+      
       if (result.rows.length > 0) {
+        const row = result.rows[0];
+        console.log(`Found event: ${row.event_id}, webhook configured: ${!!row.discord_webhook_url}`);
+        console.log(`Event tournaments: ${JSON.stringify(row.tournaments)}`);
         return {
-          webhookUrl: result.rows[0].discord_webhook_url,
-          eventName: result.rows[0].name,
-          robotImages: result.rows[0].robot_images || {}
+          webhookUrl: row.discord_webhook_url,
+          eventName: row.name,
+          robotImages: row.robot_images || {}
         };
+      } else {
+        console.log(`No event found containing tournament: ${tournamentId}`);
+        // Log all events for debugging
+        const allEvents = await pool.query('SELECT event_id, tournaments FROM events');
+        console.log(`All events in DB: ${JSON.stringify(allEvents.rows.map(r => ({ id: r.event_id, tournaments: r.tournaments })))}`);
       }
     } else {
       // Search in-memory storage
@@ -1055,8 +1076,11 @@ app.post('/api/matches/:matchId/scores', async (req, res) => {
 
       // Send Discord notification
       try {
+        console.log(`Match finalized! Attempting Discord notification for tournament: ${matchScores.tournamentId}`);
         const { webhookUrl, eventName, robotImages } = await getEventDiscordWebhook(matchScores.tournamentId);
+        
         if (webhookUrl) {
+          console.log(`Discord webhook found, sending notification...`);
           // Get competitor names and tournament info
           const { competitorA, competitorB } = await getCompetitorNames(
             matchScores.tournamentId, 
@@ -1069,7 +1093,9 @@ app.post('/api/matches/:matchId/scores', async (req, res) => {
           const winner = result.winnerId === matchScores.competitorAId ? competitorA : competitorB;
           const loser = result.winnerId === matchScores.competitorAId ? competitorB : competitorA;
           
-          await postMatchToDiscord(webhookUrl, {
+          console.log(`Posting to Discord: ${winner} defeats ${loser} in Match ${matchNum}`);
+          
+          const discordResult = await postMatchToDiscord(webhookUrl, {
             winner,
             loser,
             scoreA: result.scoreA,
@@ -1081,6 +1107,10 @@ app.post('/api/matches/:matchId/scores', async (req, res) => {
             winnerImageUrl: getRobotImage(robotImages, winner),
             loserImageUrl: getRobotImage(robotImages, loser)
           });
+          
+          console.log(`Discord notification result:`, discordResult);
+        } else {
+          console.log(`No Discord webhook configured for this event`);
         }
       } catch (discordErr) {
         // Log but don't fail the request if Discord notification fails
