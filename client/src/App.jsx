@@ -2569,8 +2569,10 @@ export default function TournamentJudgingApp() {
   const [error, setError] = useState(null);
   const [eventLoaded, setEventLoaded] = useState(false);
   
-  // Check if viewing via shared link (hides admin)
-  const isSharedView = Boolean(getUrlParam('event'));
+  // Check if viewing via shared link (hides admin by default)
+  // But allow admin access with ?admin=true parameter
+  const hasAdminOverride = getUrlParam('admin') === 'true';
+  const isSharedView = Boolean(getUrlParam('event')) && !hasAdminOverride;
   
   // Check if spectator mode - either by URL param OR by hostname
   // brackets.socalattackrobots.com = always spectator mode
