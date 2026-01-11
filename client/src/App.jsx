@@ -91,13 +91,24 @@ const api = {
     return response.json();
   },
 
-  async saveEvent(eventId, name, tournaments, scoringCriteria, robotImages) {
+  async saveEvent(eventId, name, tournaments, scoringCriteria, robotImages, discordWebhookUrl) {
     const response = await fetch(`${API_BASE_URL}/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId, name, tournaments, scoringCriteria, robotImages }),
+      body: JSON.stringify({ eventId, name, tournaments, scoringCriteria, robotImages, discordWebhookUrl }),
     });
     if (!response.ok) throw new Error('Failed to save event');
+    return response.json();
+  },
+
+  async testDiscordWebhook(eventId) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/test-discord`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Failed to test Discord webhook');
+    }
     return response.json();
   },
 
@@ -297,13 +308,26 @@ function transformChallongeData(challongeData, tournamentUrl) {
     m.bracket === 'winners' && m.round === maxWinnersRound
   );
   
-  // Filter out bracket reset matches (any match after Grand Finals)
-  // This supports "modified double elimination" where there's no bracket reset
+  // Check grand_finals_modifier from Challonge settings
+  // Values: null (standard 1-2 matches), "single_match" (no bracket reset), "skip" (no grand finals)
+  const grandFinalsModifier = tournament.grand_finals_modifier;
+  
+  // Filter out bracket reset matches based on tournament settings
   const filteredMatches = transformedMatches.filter(m => {
-    // If there's a Grand Finals match, hide any matches with higher match numbers
-    // These are bracket reset matches that we don't use
-    if (grandFinalsMatch && m.matchNum > grandFinalsMatch.matchNum) {
-      return false;
+    // If grand_finals_modifier is "single_match" or "skip", hide bracket reset matches
+    // (matches after Grand Finals)
+    if (grandFinalsModifier === 'single_match' || grandFinalsModifier === 'skip') {
+      if (grandFinalsMatch && m.matchNum > grandFinalsMatch.matchNum) {
+        return false;
+      }
+    }
+    // For standard double elimination (null), also hide empty bracket reset matches
+    // but show them if they have competitors (tournament is using bracket reset)
+    if (!grandFinalsModifier && grandFinalsMatch && m.matchNum > grandFinalsMatch.matchNum) {
+      // Only show if it has competitors assigned (bracket reset is happening)
+      if (!m.competitorA && !m.competitorB) {
+        return false;
+      }
     }
     return true;
   });
@@ -314,6 +338,8 @@ function transformChallongeData(challongeData, tournamentUrl) {
       name: tournament.name,
       url: tournamentUrl || tournament.url,
       status: tournament.state,
+      grandFinalsModifier: grandFinalsModifier, // Include for reference
+      tournamentType: tournament.tournament_type,
     },
     participants: participants.map(p => ({
       id: p.participant.id,
@@ -338,7 +364,7 @@ const StatusBadge = ({ status, winMethod, scores, theme }) => {
     return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.pendingBg} ${t.pendingText}`}>Upcoming</span>;
   }
   if (status === 'active') {
-    return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.liveBg} ${t.liveText}`}>● Live</span>;
+    return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.liveBg} ${t.liveText}`}>â— Live</span>;
   }
   // Detect KO: either winMethod is 'ko' OR one side has 0 points (covers both old 0-0 and new 33-0 format)
   if (winMethod === 'ko' || (scores && (scores.a === 0 || scores.b === 0))) {
@@ -659,11 +685,11 @@ const MatchCard = ({ match, onClick, showTournament = false, displayStatus, them
     
     switch (status) {
       case 'fighting':
-        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">● NOW FIGHTING</span>;
+        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">â— NOW FIGHTING</span>;
       case 'onDeck':
         return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">On Deck</span>;
       case 'repairing':
-        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">⏱ Repairing</span>;
+        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">â± Repairing</span>;
       default:
         return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.pendingBg} ${t.pendingText}`}>Upcoming</span>;
     }
@@ -701,7 +727,7 @@ const MatchCard = ({ match, onClick, showTournament = false, displayStatus, them
                 : `font-semibold ${t.text}`
             }`}>
               {compA.text}
-              {match.winner === match.competitorA && match.competitorA && ' ✓'}
+              {match.winner === match.competitorA && match.competitorA && ' âœ“'}
             </span>
             {match.status === 'completed' && match.winMethod === 'points' && (
               <span className={`text-sm font-mono ${t.textMuted} flex-shrink-0`}>{match.scores?.a}</span>
@@ -717,7 +743,7 @@ const MatchCard = ({ match, onClick, showTournament = false, displayStatus, them
                 : `font-semibold ${t.text}`
             }`}>
               {compB.text}
-              {match.winner === match.competitorB && match.competitorB && ' ✓'}
+              {match.winner === match.competitorB && match.competitorB && ' âœ“'}
             </span>
             {match.status === 'completed' && match.winMethod === 'points' && (
               <span className={`text-sm font-mono ${t.textMuted} flex-shrink-0`}>{match.scores?.b}</span>
@@ -821,7 +847,7 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatch
     return (
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-6 sm:p-8 text-center`}>
         <h3 className={`text-lg font-bold ${t.text} mb-2`}>No Tournaments Connected</h3>
-        <p className={t.textMuted}>Go to Admin → Tournaments to add tournament URLs</p>
+        <p className={t.textMuted}>Go to Admin â†’ Tournaments to add tournament URLs</p>
       </div>
     );
   }
@@ -1140,7 +1166,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                   </div>
                   {fighting ? (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">
-                      ● NOW FIGHTING
+                      â— NOW FIGHTING
                     </span>
                   ) : bothReady ? (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-700">
@@ -1148,7 +1174,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                     </span>
                   ) : (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">
-                      ⏱ Repairing
+                      â± Repairing
                     </span>
                   )}
                 </div>
@@ -1178,7 +1204,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                         <p className="text-red-500 font-mono text-sm">{formatCountdown(statusA.remaining)}</p>
                       )}
                       {statusA.ready && robotLastFight[match.competitorA] && (
-                        <p className="text-green-500 text-xs">✓ Ready</p>
+                        <p className="text-green-500 text-xs">âœ“ Ready</p>
                       )}
                       {!robotLastFight[match.competitorA] && (
                         <p className={`text-xs ${t.textFaint}`}>No recent fight</p>
@@ -1194,7 +1220,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                         <p className="text-red-500 font-mono text-sm">{formatCountdown(statusB.remaining)}</p>
                       )}
                       {statusB.ready && robotLastFight[match.competitorB] && (
-                        <p className="text-green-500 text-xs">✓ Ready</p>
+                        <p className="text-green-500 text-xs">âœ“ Ready</p>
                       )}
                       {!robotLastFight[match.competitorB] && (
                         <p className={`text-xs ${t.textFaint}`}>No recent fight</p>
@@ -1337,12 +1363,12 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`font-semibold ${match.winner === match.competitorA ? t.winnerText : t.text} text-sm truncate`}>
                         {match.competitorA}
-                        {match.winner === match.competitorA && ' ✓'}
+                        {match.winner === match.competitorA && ' âœ“'}
                       </span>
                       <span className={`text-xs ${t.textFaint}`}>vs</span>
                       <span className={`font-semibold ${match.winner === match.competitorB ? t.winnerText : t.text} text-sm truncate`}>
                         {match.competitorB}
-                        {match.winner === match.competitorB && ' ✓'}
+                        {match.winner === match.competitorB && ' âœ“'}
                       </span>
                     </div>
                   </div>
@@ -1619,9 +1645,9 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
 
   // Get status indicator for dropdown
   const getMatchIndicator = (match) => {
-    if (isMatchFighting(match)) return '🟡'; // Yellow for NOW FIGHTING
-    if (isMatchReady(match)) return '🟢'; // Green if both robots ready
-    return '🔴'; // Red if either robot still repairing
+    if (isMatchFighting(match)) return 'ðŸŸ¡'; // Yellow for NOW FIGHTING
+    if (isMatchReady(match)) return 'ðŸŸ¢'; // Green if both robots ready
+    return 'ðŸ”´'; // Red if either robot still repairing
   };
 
   return (
@@ -1655,7 +1681,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
 
       {submitResult?.finalized && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-          <p className="text-green-700 font-semibold">🏆 Match Complete!</p>
+          <p className="text-green-700 font-semibold">ðŸ† Match Complete!</p>
           <p className={`text-sm ${t.textMuted} mt-1`}>
             Winner: {submitResult.result.winMethod === 'ko' ? 'KO' : `${submitResult.result.scoreA}-${submitResult.result.scoreB}`}
           </p>
@@ -1693,7 +1719,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
                     }`}
                     title={`Judge ${num}${hasJudgeSubmitted ? ' (submitted)' : isCurrentJudge ? ' (you)' : ''}`}
                   >
-                    {hasJudgeSubmitted ? '✓' : num}
+                    {hasJudgeSubmitted ? 'âœ“' : num}
                   </div>
                 );
               })}
@@ -1780,7 +1806,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
               </div>
             </div>
             <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorA || 'TBD'}</p>
-            <p className={`text-xl sm:text-2xl font-bold ${t.blueText} mt-1`}>{isKO ? '—' : totalA}</p>
+            <p className={`text-xl sm:text-2xl font-bold ${t.blueText} mt-1`}>{isKO ? 'â€”' : totalA}</p>
           </div>
           <div className="text-center">
             <span className={`${t.textFaint} font-medium text-sm`}>vs</span>
@@ -1803,7 +1829,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
               </div>
             </div>
             <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorB || 'TBD'}</p>
-            <p className={`text-xl sm:text-2xl font-bold ${t.redText} mt-1`}>{isKO ? '—' : totalB}</p>
+            <p className={`text-xl sm:text-2xl font-bold ${t.redText} mt-1`}>{isKO ? 'â€”' : totalB}</p>
           </div>
         </div>
       </div>
@@ -1873,7 +1899,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
         hasSubmitted ? (
           <div className="space-y-3">
             <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-              <p className="text-green-700 font-semibold">✓ Scores Submitted</p>
+              <p className="text-green-700 font-semibold">âœ“ Scores Submitted</p>
               <p className={`text-sm ${t.textFaint} mt-1`}>
                 Waiting for {3 - (submitResult?.judgeCount || 1)} more judge(s)...
               </p>
@@ -1895,7 +1921,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
 };
 
 // Admin Dashboard View
-const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, scoringCriteria, robotImages, onEventIdChange, onEventNameChange, onAddTournament, onRemoveTournament, onRefreshAll, onSaveToServer, onCopyLink, onScoringCriteriaChange, onRobotImagesChange, theme }) => {
+const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, scoringCriteria, robotImages, discordWebhookUrl, onEventIdChange, onEventNameChange, onAddTournament, onRemoveTournament, onRefreshAll, onSaveToServer, onCopyLink, onScoringCriteriaChange, onRobotImagesChange, onDiscordWebhookUrlChange, theme }) => {
   const t = themes[theme];
   const [selectedTab, setSelectedTab] = useState('settings');
   const [newTournamentUrl, setNewTournamentUrl] = useState('');
@@ -1906,13 +1932,15 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
   const [localEventName, setLocalEventName] = useState(eventName);
   const [localCriteria, setLocalCriteria] = useState(scoringCriteria);
   const [localRobotImages, setLocalRobotImages] = useState(robotImages || {});
+  const [localDiscordWebhookUrl, setLocalDiscordWebhookUrl] = useState(discordWebhookUrl || '');
   
   useEffect(() => {
     setLocalEventId(eventId);
     setLocalEventName(eventName);
     setLocalCriteria(scoringCriteria);
     setLocalRobotImages(robotImages || {});
-  }, [eventId, eventName, scoringCriteria, robotImages]);
+    setLocalDiscordWebhookUrl(discordWebhookUrl || '');
+  }, [eventId, eventName, scoringCriteria, robotImages, discordWebhookUrl]);
 
   const updateCriterion = (index, field, value) => {
     const updated = [...localCriteria];
@@ -2018,10 +2046,37 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
       onEventIdChange(localEventId.trim());
       onEventNameChange(localEventName.trim());
       onScoringCriteriaChange(localCriteria);
-      await onSaveToServer(localEventId.trim(), localEventName.trim());
+      onDiscordWebhookUrlChange(localDiscordWebhookUrl.trim());
+      await onSaveToServer(localEventId.trim(), localEventName.trim(), localDiscordWebhookUrl.trim());
       setSyncStatus({ success: true, message: 'Event saved! Share the link with judges.' });
     } catch (err) {
       setSyncStatus({ success: false, message: err.message });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleTestDiscord = async () => {
+    if (!localEventId.trim()) {
+      setSyncStatus({ success: false, message: 'Save the event first before testing Discord' });
+      return;
+    }
+    if (!localDiscordWebhookUrl.trim()) {
+      setSyncStatus({ success: false, message: 'Enter a Discord webhook URL first' });
+      return;
+    }
+    
+    setIsLoading(true);
+    setSyncStatus(null);
+    
+    try {
+      // First save the event to ensure webhook URL is stored
+      await onSaveToServer(localEventId.trim(), localEventName.trim(), localDiscordWebhookUrl.trim());
+      // Then test the webhook
+      await api.testDiscordWebhook(localEventId.trim());
+      setSyncStatus({ success: true, message: '✓ Test message sent to Discord!' });
+    } catch (err) {
+      setSyncStatus({ success: false, message: `Discord test failed: ${err.message}` });
     } finally {
       setIsLoading(false);
     }
@@ -2037,12 +2092,12 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
   return (
     <div className="space-y-4">
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-1 inline-flex gap-1 flex-wrap`}>
-        {['settings', 'tournaments', 'images', 'share'].map(tab => (
+        {['settings', 'tournaments', 'images', 'discord', 'share'].map(tab => (
           <button key={tab} onClick={() => setSelectedTab(tab)}
             className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold capitalize transition-colors ${
               selectedTab === tab ? 'bg-gray-900 text-white' : `${t.textMuted} hover:${t.text}`
             }`}>
-            {tab === 'images' ? 'Robot Images' : tab}
+            {tab === 'images' ? 'Robot Images' : tab === 'discord' ? '🔔 Discord' : tab}
           </button>
         ))}
       </div>
@@ -2152,7 +2207,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                 disabled={isLoading}
                 className={`px-3 py-1.5 text-sm font-semibold ${t.textMuted} ${t.hoverBg} rounded-lg transition-colors disabled:opacity-50`}
               >
-                {isLoading ? 'Refreshing...' : '↻ Refresh All'}
+                {isLoading ? 'Refreshing...' : 'â†» Refresh All'}
               </button>
             )}
           </div>
@@ -2193,7 +2248,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                       <p className={`text-xs ${t.textFaint}`}>{url}</p>
                       {tourneyData && (
                         <p className={`text-xs ${t.textMuted} mt-1`}>
-                          Status: {tourneyData.tournament.status} • {tourneyData.matches?.length || 0} matches
+                          Status: {tourneyData.tournament.status} â€¢ {tourneyData.matches?.length || 0} matches
                         </p>
                       )}
                     </div>
@@ -2245,7 +2300,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                 disabled={isLoading || !newRceUrl.trim()}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
               >
-                {isLoading ? 'Loading...' : '📷 Import'}
+                {isLoading ? 'Loading...' : 'ðŸ“· Import'}
               </button>
             </div>
             <p className={`text-xs ${t.textFaint} mt-1`}>
@@ -2298,6 +2353,88 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
           </p>
         </div>
       )}
+
+      {selectedTab === 'discord' && (
+        <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5 space-y-5`}>
+          <h3 className={`font-bold ${t.text}`}>Discord Integration</h3>
+          
+          <div className={`${t.tableBg} rounded-lg p-4`}>
+            <p className={`text-sm ${t.textMuted}`}>
+              Get real-time match results posted to your Discord server! When a match is finalized by all 3 judges, a notification will be automatically sent.
+            </p>
+          </div>
+
+          <div>
+            <label className={`block text-sm font-medium ${t.textMuted} mb-1`}>Discord Webhook URL</label>
+            <input 
+              type="text" 
+              value={localDiscordWebhookUrl}
+              onChange={(e) => setLocalDiscordWebhookUrl(e.target.value)}
+              placeholder="https://discord.com/api/webhooks/..."
+              className={`w-full px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`} 
+            />
+            <p className={`text-xs ${t.textFaint} mt-1`}>
+              Create a webhook in your Discord server: Server Settings → Integrations → Webhooks → New Webhook
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <button 
+              onClick={handleTestDiscord}
+              disabled={isLoading || !localDiscordWebhookUrl.trim() || !localEventId.trim()}
+              className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Testing...' : '🧪 Test Webhook'}
+            </button>
+            <button 
+              onClick={handleSaveEvent}
+              disabled={isLoading || !localEventId.trim()}
+              className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isLoading ? 'Saving...' : '💾 Save Settings'}
+            </button>
+          </div>
+
+          <div className={`pt-4 border-t ${t.divider}`}>
+            <p className={`text-sm font-medium ${t.textMuted} mb-2`}>How it works</p>
+            <div className="space-y-2">
+              <div className={`${t.tableBg} rounded-lg p-3 flex items-start gap-3`}>
+                <span className="text-lg">1️⃣</span>
+                <div>
+                  <p className={`text-sm ${t.text}`}>Create a webhook in Discord</p>
+                  <p className={`text-xs ${t.textFaint}`}>Server Settings → Integrations → Webhooks</p>
+                </div>
+              </div>
+              <div className={`${t.tableBg} rounded-lg p-3 flex items-start gap-3`}>
+                <span className="text-lg">2️⃣</span>
+                <div>
+                  <p className={`text-sm ${t.text}`}>Paste the webhook URL above</p>
+                  <p className={`text-xs ${t.textFaint}`}>Then click "Test Webhook" to verify</p>
+                </div>
+              </div>
+              <div className={`${t.tableBg} rounded-lg p-3 flex items-start gap-3`}>
+                <span className="text-lg">3️⃣</span>
+                <div>
+                  <p className={`text-sm ${t.text}`}>Match results posted automatically</p>
+                  <p className={`text-xs ${t.textFaint}`}>Winner, loser, score, and KO/Decision status</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {localDiscordWebhookUrl && (
+            <div className={`${t.tableBg} rounded-lg p-3`}>
+              <div className="flex items-center gap-2">
+                <span className="text-green-500">✓</span>
+                <span className={`text-sm ${t.text}`}>Webhook configured</span>
+              </div>
+              <p className={`text-xs ${t.textFaint} mt-1`}>
+                Match results will be posted to Discord when finalized
+              </p>
+            </div>
+          )}
+        </div>
+      )}
       
       {selectedTab === 'share' && (
         <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5 space-y-5`}>
@@ -2314,14 +2451,14 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
             disabled={isLoading || !localEventId.trim() || tournamentUrls.length === 0}
             className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'Saving...' : '💾 Save Event to Server'}
+            {isLoading ? 'Saving...' : 'ðŸ’¾ Save Event to Server'}
           </button>
 
           {localEventId && (
             <>
               {/* Judge Link */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textMuted}`}>🎯 Judge Link</label>
+                <label className={`block text-sm font-medium ${t.textMuted}`}>ðŸŽ¯ Judge Link</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -2333,7 +2470,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     onClick={handleCopyLink}
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    📋 Copy
+                    ðŸ“‹ Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
@@ -2343,7 +2480,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
 
               {/* Spectator Link - Subdomain */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textMuted}`}>👀 Spectator Link (Recommended)</label>
+                <label className={`block text-sm font-medium ${t.textMuted}`}>ðŸ‘€ Spectator Link (Recommended)</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -2358,7 +2495,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     }}
                     className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    📋 Copy
+                    ðŸ“‹ Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
@@ -2368,7 +2505,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
 
               {/* Legacy Spectator Link */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textFaint}`}>👀 Spectator Link (Legacy)</label>
+                <label className={`block text-sm font-medium ${t.textFaint}`}>ðŸ‘€ Spectator Link (Legacy)</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -2383,7 +2520,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     }}
                     className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    📋 Copy
+                    ðŸ“‹ Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
@@ -2425,6 +2562,7 @@ export default function TournamentJudgingApp() {
   const [tournaments, setTournaments] = useState([]);
   const [scoringCriteria, setScoringCriteria] = useState(DEFAULT_SCORING_CRITERIA);
   const [robotImages, setRobotImages] = useState({});
+  const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
   const [activeMatches, setActiveMatches] = useState({});
   const [repairResets, setRepairResets] = useState({});
   const [isLoading, setIsLoading] = useState(false);
@@ -2486,6 +2624,7 @@ export default function TournamentJudgingApp() {
             setTournamentUrls(eventData.tournaments || []);
             setScoringCriteria(eventData.scoringCriteria || DEFAULT_SCORING_CRITERIA);
             setRobotImages(eventData.robotImages || {});
+            setDiscordWebhookUrl(eventData.discordWebhookUrl || '');
             setEventLoaded(true);
           }
         } catch (err) {
@@ -2552,8 +2691,8 @@ export default function TournamentJudgingApp() {
     setTournaments(prev => prev.filter(t => t.tournament.url !== url));
   };
 
-  const saveToServer = async (id, name) => {
-    await api.saveEvent(id, name, tournamentUrls, scoringCriteria, robotImages);
+  const saveToServer = async (id, name, webhookUrl) => {
+    await api.saveEvent(id, name, tournamentUrls, scoringCriteria, robotImages, webhookUrl || discordWebhookUrl);
     setUrlParam('event', id);
   };
 
@@ -2891,6 +3030,7 @@ export default function TournamentJudgingApp() {
             tournaments={tournaments}
             scoringCriteria={scoringCriteria}
             robotImages={robotImages}
+            discordWebhookUrl={discordWebhookUrl}
             onEventIdChange={setEventId}
             onEventNameChange={setEventName}
             onAddTournament={addTournament}
@@ -2900,6 +3040,7 @@ export default function TournamentJudgingApp() {
             onCopyLink={copyLink}
             onScoringCriteriaChange={setScoringCriteria}
             onRobotImagesChange={setRobotImages}
+            onDiscordWebhookUrlChange={setDiscordWebhookUrl}
             theme={theme} 
           />
         )}
@@ -2913,7 +3054,7 @@ export default function TournamentJudgingApp() {
               <div>Built for <a href="https://www.socalattackrobots.com/" className={t.blueText}>SCAR</a></div>
               <div className="flex items-center gap-2 sm:gap-4">
                 <span>{tournaments.length} tournament{tournaments.length !== 1 ? 's' : ''}</span>
-                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline">â€¢</span>
                 <span className="hidden sm:inline">Shareable via URL</span>
               </div>
             </div>
