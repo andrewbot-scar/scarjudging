@@ -41,6 +41,7 @@ async function initDatabase() {
         tournaments JSONB NOT NULL DEFAULT '[]',
         scoring_criteria JSONB,
         robot_images JSONB,
+        discord_webhook_url VARCHAR(512),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -54,6 +55,11 @@ async function initDatabase() {
     // Add robot_images column if it doesn't exist (for existing databases)
     await pool.query(`
       ALTER TABLE events ADD COLUMN IF NOT EXISTS robot_images JSONB
+    `).catch(() => {});
+
+    // Add discord_webhook_url column if it doesn't exist (for existing databases)
+    await pool.query(`
+      ALTER TABLE events ADD COLUMN IF NOT EXISTS discord_webhook_url VARCHAR(512)
     `).catch(() => {});
 
     // Create judge_scores table for persistent score storage
@@ -139,6 +145,139 @@ async function challongeRequest(endpoint, method = 'GET', body = null) {
 }
 
 // ============================================
+// DISCORD WEBHOOK INTEGRATION
+// ============================================
+
+// Post match result to Discord webhook
+async function postMatchToDiscord(webhookUrl, matchData) {
+  if (!webhookUrl) {
+    console.log('No Discord webhook URL configured, skipping notification');
+    return null;
+  }
+
+  const { 
+    winner, 
+    loser, 
+    scoreA, 
+    scoreB, 
+    winMethod, 
+    tournamentName, 
+    matchNum,
+    eventName,
+    winnerImageUrl,
+    loserImageUrl
+  } = matchData;
+
+  // Create Discord embed
+  const embed = {
+    title: `🤖 Match ${matchNum} Complete!`,
+    description: `**${tournamentName}**`,
+    color: winMethod === 'ko' ? 0xFF0000 : 0x00FF00, // Red for KO, Green for decision
+    fields: [
+      {
+        name: '🏆 Winner',
+        value: winner || 'Unknown',
+        inline: true
+      },
+      {
+        name: '💀 Defeated',
+        value: loser || 'Unknown',
+        inline: true
+      },
+      {
+        name: '📊 Result',
+        value: winMethod === 'ko' ? '**KNOCKOUT!**' : `${scoreA} - ${scoreB}`,
+        inline: true
+      }
+    ],
+    timestamp: new Date().toISOString(),
+    footer: {
+      text: eventName ? `${eventName} • SCAR Judge Portal` : 'SCAR Judge Portal'
+    }
+  };
+
+  // Add winner thumbnail if available
+  if (winnerImageUrl) {
+    embed.thumbnail = { url: winnerImageUrl };
+  }
+
+  try {
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        embeds: [embed],
+        username: 'SCAR Match Reporter',
+        avatar_url: 'https://www.socalattackrobots.com/favicon.ico'
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Discord webhook failed:', response.status, errorText);
+      return { success: false, error: errorText };
+    }
+
+    console.log(`Discord notification sent for Match ${matchNum}: ${winner} defeats ${loser}`);
+    return { success: true };
+  } catch (err) {
+    console.error('Discord webhook error:', err.message);
+    return { success: false, error: err.message };
+  }
+}
+
+// Helper to get event's Discord webhook URL
+async function getEventDiscordWebhook(tournamentId) {
+  try {
+    if (pool) {
+      // Find event that contains this tournament
+      const result = await pool.query(
+        `SELECT event_id, name, discord_webhook_url, robot_images FROM events WHERE tournaments @> $1`,
+        [JSON.stringify([tournamentId])]
+      );
+      if (result.rows.length > 0) {
+        return {
+          webhookUrl: result.rows[0].discord_webhook_url,
+          eventName: result.rows[0].name,
+          robotImages: result.rows[0].robot_images || {}
+        };
+      }
+    } else {
+      // Search in-memory storage
+      for (const [eventId, eventData] of Object.entries(memoryStorage.events)) {
+        if (eventData.tournaments && eventData.tournaments.includes(tournamentId)) {
+          return {
+            webhookUrl: eventData.discordWebhookUrl,
+            eventName: eventData.name,
+            robotImages: eventData.robotImages || {}
+          };
+        }
+      }
+    }
+    return { webhookUrl: null, eventName: null, robotImages: {} };
+  } catch (err) {
+    console.error('Error getting event Discord webhook:', err);
+    return { webhookUrl: null, eventName: null, robotImages: {} };
+  }
+}
+
+// Helper for case-insensitive robot image lookup (same as frontend)
+function getRobotImage(robotImages, robotName) {
+  if (!robotImages || !robotName) return null;
+  
+  // Try exact match first
+  if (robotImages[robotName]) return robotImages[robotName];
+  
+  // Try case-insensitive match
+  const lowerName = robotName.toLowerCase();
+  for (const [key, value] of Object.entries(robotImages)) {
+    if (key.toLowerCase() === lowerName) return value;
+  }
+  
+  return null;
+}
+
+// ============================================
 // IN-MEMORY FALLBACK STORAGE
 // ============================================
 
@@ -155,7 +294,7 @@ const memoryStorage = {
 // POST /api/events - Create or update an event
 app.post('/api/events', async (req, res) => {
   try {
-    const { eventId, name, tournaments, scoringCriteria, robotImages } = req.body;
+    const { eventId, name, tournaments, scoringCriteria, robotImages, discordWebhookUrl } = req.body;
 
     if (!eventId) {
       return res.status(400).json({ error: 'eventId is required' });
@@ -170,13 +309,13 @@ app.post('/api/events', async (req, res) => {
     if (pool) {
       // Use PostgreSQL
       await pool.query(`
-        INSERT INTO events (event_id, name, tournaments, scoring_criteria, robot_images, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO events (event_id, name, tournaments, scoring_criteria, robot_images, discord_webhook_url, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (event_id) 
-        DO UPDATE SET name = $2, tournaments = $3, scoring_criteria = $4, robot_images = $5, updated_at = $6
-      `, [eventId, name || eventId, JSON.stringify(tournaments), JSON.stringify(scoringCriteria || null), JSON.stringify(robotImages || null), now]);
+        DO UPDATE SET name = $2, tournaments = $3, scoring_criteria = $4, robot_images = $5, discord_webhook_url = $6, updated_at = $7
+      `, [eventId, name || eventId, JSON.stringify(tournaments), JSON.stringify(scoringCriteria || null), JSON.stringify(robotImages || null), discordWebhookUrl || null, now]);
 
-      console.log(`Event saved to database: ${eventId} with ${tournaments.length} tournaments`);
+      console.log(`Event saved to database: ${eventId} with ${tournaments.length} tournaments${discordWebhookUrl ? ' (Discord webhook configured)' : ''}`);
     } else {
       // Fallback to in-memory
       memoryStorage.events[eventId] = {
@@ -184,6 +323,7 @@ app.post('/api/events', async (req, res) => {
         tournaments,
         scoringCriteria: scoringCriteria || null,
         robotImages: robotImages || null,
+        discordWebhookUrl: discordWebhookUrl || null,
         createdAt: memoryStorage.events[eventId]?.createdAt || now,
         updatedAt: now,
       };
@@ -198,6 +338,7 @@ app.post('/api/events', async (req, res) => {
         tournaments,
         scoringCriteria: scoringCriteria || null,
         robotImages: robotImages || null,
+        discordWebhookUrl: discordWebhookUrl || null,
         updatedAt: now,
       },
     });
@@ -230,6 +371,7 @@ app.get('/api/events/:eventId', async (req, res) => {
         tournaments: row.tournaments,
         scoringCriteria: row.scoring_criteria || null,
         robotImages: row.robot_images || null,
+        discordWebhookUrl: row.discord_webhook_url || null,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       });
@@ -307,6 +449,57 @@ app.delete('/api/events/:eventId', async (req, res) => {
     res.json({ success: true, message: `Event ${eventId} deleted` });
   } catch (error) {
     console.error('Error deleting event:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/events/:eventId/test-discord - Test Discord webhook
+app.post('/api/events/:eventId/test-discord', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    
+    // Get event data
+    let eventData;
+    if (pool) {
+      const result = await pool.query(
+        'SELECT name, discord_webhook_url FROM events WHERE event_id = $1',
+        [eventId]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Event not found' });
+      }
+      eventData = result.rows[0];
+    } else {
+      if (!memoryStorage.events[eventId]) {
+        return res.status(404).json({ error: 'Event not found' });
+      }
+      eventData = memoryStorage.events[eventId];
+    }
+
+    const webhookUrl = eventData.discord_webhook_url || eventData.discordWebhookUrl;
+    if (!webhookUrl) {
+      return res.status(400).json({ error: 'No Discord webhook URL configured for this event' });
+    }
+
+    // Send test message
+    const testResult = await postMatchToDiscord(webhookUrl, {
+      winner: 'Test Bot Alpha',
+      loser: 'Test Bot Beta',
+      scoreA: 22,
+      scoreB: 11,
+      winMethod: 'points',
+      tournamentName: 'Test Tournament',
+      matchNum: 0,
+      eventName: eventData.name
+    });
+
+    if (testResult.success) {
+      res.json({ success: true, message: 'Test message sent to Discord!' });
+    } else {
+      res.status(400).json({ success: false, error: testResult.error || 'Failed to send test message' });
+    }
+  } catch (error) {
+    console.error('Error testing Discord webhook:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -754,6 +947,55 @@ async function saveJudgeScoresToStorage(matchId, data) {
   }
 }
 
+// Helper to get competitor names from Challonge
+async function getCompetitorNames(tournamentId, competitorAId, competitorBId) {
+  try {
+    const data = await challongeRequest(
+      `/tournaments/${tournamentId}.json?include_participants=1`
+    );
+    const participants = data.tournament.participants || [];
+    
+    let competitorA = null;
+    let competitorB = null;
+    
+    for (const p of participants) {
+      if (p.participant.id === competitorAId) {
+        competitorA = p.participant.name;
+      }
+      if (p.participant.id === competitorBId) {
+        competitorB = p.participant.name;
+      }
+    }
+    
+    return { competitorA, competitorB };
+  } catch (err) {
+    console.error('Error getting competitor names:', err);
+    return { competitorA: null, competitorB: null };
+  }
+}
+
+// Helper to get tournament name from Challonge
+async function getTournamentName(tournamentId) {
+  try {
+    const data = await challongeRequest(`/tournaments/${tournamentId}.json`);
+    return data.tournament.name;
+  } catch (err) {
+    console.error('Error getting tournament name:', err);
+    return tournamentId;
+  }
+}
+
+// Helper to get match number from Challonge
+async function getMatchNumber(tournamentId, matchId) {
+  try {
+    const data = await challongeRequest(`/tournaments/${tournamentId}/matches/${matchId}.json`);
+    return data.match.suggested_play_order || data.match.id;
+  } catch (err) {
+    console.error('Error getting match number:', err);
+    return matchId;
+  }
+}
+
 // POST /api/matches/:matchId/scores - Submit judge scores
 app.post('/api/matches/:matchId/scores', async (req, res) => {
   try {
@@ -810,6 +1052,40 @@ app.post('/api/matches/:matchId/scores', async (req, res) => {
         matchId,
         matchScores
       );
+
+      // Send Discord notification
+      try {
+        const { webhookUrl, eventName, robotImages } = await getEventDiscordWebhook(matchScores.tournamentId);
+        if (webhookUrl) {
+          // Get competitor names and tournament info
+          const { competitorA, competitorB } = await getCompetitorNames(
+            matchScores.tournamentId, 
+            matchScores.competitorAId, 
+            matchScores.competitorBId
+          );
+          const tournamentName = await getTournamentName(matchScores.tournamentId);
+          const matchNum = await getMatchNumber(matchScores.tournamentId, matchId);
+          
+          const winner = result.winnerId === matchScores.competitorAId ? competitorA : competitorB;
+          const loser = result.winnerId === matchScores.competitorAId ? competitorB : competitorA;
+          
+          await postMatchToDiscord(webhookUrl, {
+            winner,
+            loser,
+            scoreA: result.scoreA,
+            scoreB: result.scoreB,
+            winMethod: result.winMethod,
+            tournamentName,
+            matchNum,
+            eventName,
+            winnerImageUrl: getRobotImage(robotImages, winner),
+            loserImageUrl: getRobotImage(robotImages, loser)
+          });
+        }
+      } catch (discordErr) {
+        // Log but don't fail the request if Discord notification fails
+        console.error('Discord notification error (non-fatal):', discordErr.message);
+      }
 
       res.json({
         success: true,
