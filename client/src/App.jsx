@@ -364,7 +364,7 @@ const StatusBadge = ({ status, winMethod, scores, theme }) => {
     return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.pendingBg} ${t.pendingText}`}>Upcoming</span>;
   }
   if (status === 'active') {
-    return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.liveBg} ${t.liveText}`}>â— Live</span>;
+    return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.liveBg} ${t.liveText}`}>● Live</span>;
   }
   // Detect KO: either winMethod is 'ko' OR one side has 0 points (covers both old 0-0 and new 33-0 format)
   if (winMethod === 'ko' || (scores && (scores.a === 0 || scores.b === 0))) {
@@ -685,11 +685,11 @@ const MatchCard = ({ match, onClick, showTournament = false, displayStatus, them
     
     switch (status) {
       case 'fighting':
-        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">â— NOW FIGHTING</span>;
+        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">● NOW FIGHTING</span>;
       case 'onDeck':
         return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">On Deck</span>;
       case 'repairing':
-        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">â± Repairing</span>;
+        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">⏱ Repairing</span>;
       default:
         return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.pendingBg} ${t.pendingText}`}>Upcoming</span>;
     }
@@ -727,7 +727,7 @@ const MatchCard = ({ match, onClick, showTournament = false, displayStatus, them
                 : `font-semibold ${t.text}`
             }`}>
               {compA.text}
-              {match.winner === match.competitorA && match.competitorA && ' âœ“'}
+              {match.winner === match.competitorA && match.competitorA && ' ✓'}
             </span>
             {match.status === 'completed' && match.winMethod === 'points' && (
               <span className={`text-sm font-mono ${t.textMuted} flex-shrink-0`}>{match.scores?.a}</span>
@@ -743,7 +743,7 @@ const MatchCard = ({ match, onClick, showTournament = false, displayStatus, them
                 : `font-semibold ${t.text}`
             }`}>
               {compB.text}
-              {match.winner === match.competitorB && match.competitorB && ' âœ“'}
+              {match.winner === match.competitorB && match.competitorB && ' ✓'}
             </span>
             {match.status === 'completed' && match.winMethod === 'points' && (
               <span className={`text-sm font-mono ${t.textMuted} flex-shrink-0`}>{match.scores?.b}</span>
@@ -847,7 +847,7 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatch
     return (
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-6 sm:p-8 text-center`}>
         <h3 className={`text-lg font-bold ${t.text} mb-2`}>No Tournaments Connected</h3>
-        <p className={t.textMuted}>Go to Admin â†’ Tournaments to add tournament URLs</p>
+        <p className={t.textMuted}>Go to Admin → Tournaments to add tournament URLs</p>
       </div>
     );
   }
@@ -1166,7 +1166,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                   </div>
                   {fighting ? (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">
-                      â— NOW FIGHTING
+                      ● NOW FIGHTING
                     </span>
                   ) : bothReady ? (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-700">
@@ -1174,7 +1174,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                     </span>
                   ) : (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">
-                      â± Repairing
+                      ⏱ Repairing
                     </span>
                   )}
                 </div>
@@ -1204,7 +1204,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                         <p className="text-red-500 font-mono text-sm">{formatCountdown(statusA.remaining)}</p>
                       )}
                       {statusA.ready && robotLastFight[match.competitorA] && (
-                        <p className="text-green-500 text-xs">âœ“ Ready</p>
+                        <p className="text-green-500 text-xs">✓ Ready</p>
                       )}
                       {!robotLastFight[match.competitorA] && (
                         <p className={`text-xs ${t.textFaint}`}>No recent fight</p>
@@ -1220,7 +1220,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                         <p className="text-red-500 font-mono text-sm">{formatCountdown(statusB.remaining)}</p>
                       )}
                       {statusB.ready && robotLastFight[match.competitorB] && (
-                        <p className="text-green-500 text-xs">âœ“ Ready</p>
+                        <p className="text-green-500 text-xs">✓ Ready</p>
                       )}
                       {!robotLastFight[match.competitorB] && (
                         <p className={`text-xs ${t.textFaint}`}>No recent fight</p>
@@ -1363,12 +1363,12 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`font-semibold ${match.winner === match.competitorA ? t.winnerText : t.text} text-sm truncate`}>
                         {match.competitorA}
-                        {match.winner === match.competitorA && ' âœ“'}
+                        {match.winner === match.competitorA && ' ✓'}
                       </span>
                       <span className={`text-xs ${t.textFaint}`}>vs</span>
                       <span className={`font-semibold ${match.winner === match.competitorB ? t.winnerText : t.text} text-sm truncate`}>
                         {match.competitorB}
-                        {match.winner === match.competitorB && ' âœ“'}
+                        {match.winner === match.competitorB && ' ✓'}
                       </span>
                     </div>
                   </div>
@@ -1719,7 +1719,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
                     }`}
                     title={`Judge ${num}${hasJudgeSubmitted ? ' (submitted)' : isCurrentJudge ? ' (you)' : ''}`}
                   >
-                    {hasJudgeSubmitted ? 'âœ“' : num}
+                    {hasJudgeSubmitted ? '✓' : num}
                   </div>
                 );
               })}
@@ -1806,7 +1806,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
               </div>
             </div>
             <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorA || 'TBD'}</p>
-            <p className={`text-xl sm:text-2xl font-bold ${t.blueText} mt-1`}>{isKO ? 'â€”' : totalA}</p>
+            <p className={`text-xl sm:text-2xl font-bold ${t.blueText} mt-1`}>{isKO ? '—' : totalA}</p>
           </div>
           <div className="text-center">
             <span className={`${t.textFaint} font-medium text-sm`}>vs</span>
@@ -1829,7 +1829,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
               </div>
             </div>
             <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorB || 'TBD'}</p>
-            <p className={`text-xl sm:text-2xl font-bold ${t.redText} mt-1`}>{isKO ? 'â€”' : totalB}</p>
+            <p className={`text-xl sm:text-2xl font-bold ${t.redText} mt-1`}>{isKO ? '—' : totalB}</p>
           </div>
         </div>
       </div>
@@ -1899,7 +1899,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
         hasSubmitted ? (
           <div className="space-y-3">
             <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-              <p className="text-green-700 font-semibold">âœ“ Scores Submitted</p>
+              <p className="text-green-700 font-semibold">✓ Scores Submitted</p>
               <p className={`text-sm ${t.textFaint} mt-1`}>
                 Waiting for {3 - (submitResult?.judgeCount || 1)} more judge(s)...
               </p>
@@ -2207,7 +2207,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                 disabled={isLoading}
                 className={`px-3 py-1.5 text-sm font-semibold ${t.textMuted} ${t.hoverBg} rounded-lg transition-colors disabled:opacity-50`}
               >
-                {isLoading ? 'Refreshing...' : 'â†» Refresh All'}
+                {isLoading ? 'Refreshing...' : '↻ Refresh All'}
               </button>
             )}
           </div>
@@ -2248,7 +2248,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                       <p className={`text-xs ${t.textFaint}`}>{url}</p>
                       {tourneyData && (
                         <p className={`text-xs ${t.textMuted} mt-1`}>
-                          Status: {tourneyData.tournament.status} â€¢ {tourneyData.matches?.length || 0} matches
+                          Status: {tourneyData.tournament.status} • {tourneyData.matches?.length || 0} matches
                         </p>
                       )}
                     </div>
@@ -3056,7 +3056,7 @@ export default function TournamentJudgingApp() {
               <div>Built for <a href="https://www.socalattackrobots.com/" className={t.blueText}>SCAR</a></div>
               <div className="flex items-center gap-2 sm:gap-4">
                 <span>{tournaments.length} tournament{tournaments.length !== 1 ? 's' : ''}</span>
-                <span className="hidden sm:inline">â€¢</span>
+                <span className="hidden sm:inline">•</span>
                 <span className="hidden sm:inline">Shareable via URL</span>
               </div>
             </div>
