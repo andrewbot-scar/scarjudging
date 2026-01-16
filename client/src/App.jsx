@@ -955,7 +955,8 @@ const RobotLink = ({ name, weightClass, isWinner, isPlaceholder, className, them
 const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) => {
   const t = themes[theme];
   const valueB = maxPoints - valueA;
-  // Flip the percentage so sliding right gives right competitor (B) more points
+  // Calculate percentage for positioning thumb (0% = all points to A, 100% = all points to B)
+  // When valueA is high, thumb should be on LEFT (0%), when valueA is low, thumb should be on RIGHT (100%)
   const percentage = ((maxPoints - valueA) / maxPoints) * 100;
   const [lastValue, setLastValue] = useState(valueA);
   
@@ -1029,43 +1030,49 @@ const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) =>
         
         <div className="flex-1 relative py-3">
           {/* Track background */}
-          <div className={`h-2 ${t.sliderBg} rounded-full relative overflow-visible`}>
-            {/* Red fill from right (for competitor B) */}
-            <div 
-              className="absolute right-0 top-0 h-full bg-red-500 rounded-full transition-all duration-150"
-              style={{ width: `${percentage}%` }}
-            />
+          <div className={`h-2 ${t.sliderBg} rounded-full relative overflow-hidden`}>
             {/* Blue fill from left (for competitor A) */}
             <div 
-              className="absolute left-0 top-0 h-full bg-blue-500 rounded-full transition-all duration-150"
-              style={{ width: `${100 - percentage}%` }}
+              className="absolute left-0 top-0 h-full bg-blue-500 rounded-l-full transition-all duration-150"
+              style={{ width: `${(valueA / maxPoints) * 100}%` }}
+            />
+            {/* Red fill from right (for competitor B) */}
+            <div 
+              className="absolute right-0 top-0 h-full bg-red-500 rounded-r-full transition-all duration-150"
+              style={{ width: `${(valueB / maxPoints) * 100}%` }}
             />
           </div>
           
-          {/* Circular thumb with scale animation on interaction */}
+          {/* Circular thumb - positioned based on valueA */}
           <div 
             className="absolute pointer-events-none transition-all duration-150"
             style={{ 
-              left: `${100 - percentage}%`,
+              left: `${(valueA / maxPoints) * 100}%`,
               top: '50%',
-              transform: 'translate(-50%, -50%)'
+              marginTop: '-0.5rem',
+              marginLeft: '-0.75rem'
             }}
           >
-            <div className={`w-6 h-6 rounded-full border-3 shadow-lg transition-transform ${
-              disabled ? 'bg-gray-400 border-gray-500' : 'bg-white border-gray-700'
+            <div className={`w-6 h-6 rounded-full shadow-lg transition-transform ${
+              disabled ? 'bg-gray-400 border-2 border-gray-500' : 'bg-white border-2 border-gray-700'
             }`} />
           </div>
           
-          {/* Hidden input slider */}
+          {/* Range input - reversed so sliding right increases valueB */}
           <input
             type="range" 
             min={0} 
             max={maxPoints} 
-            value={valueA}
-            onChange={(e) => handleChange(e.target.value)}
+            value={maxPoints - valueA}
+            onChange={(e) => handleChange(maxPoints - parseInt(e.target.value))}
             disabled={disabled}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
-            style={{ touchAction: 'none' }}
+            className="absolute w-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
+            style={{ 
+              top: '50%',
+              transform: 'translateY(-50%)',
+              height: '40px',
+              touchAction: 'none'
+            }}
           />
           
           {/* Tick marks */}
