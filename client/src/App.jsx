@@ -581,7 +581,7 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
 
   const h2hRecord = getH2HRecord();
 
-  // Helper to render ELO badge
+  // Helper to render ELO badge - two line format
   const renderEloBadge = (eloData, robotName) => {
     if (!eloData) return null;
     const eloUrl = getEloRobotUrl(weightClass?.slug, robotName);
@@ -592,18 +592,26 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
         target="_blank"
         rel="noopener noreferrer"
         onClick={(e) => e.stopPropagation()}
-        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${t.tableBg} hover:opacity-80 transition-opacity`}
+        className={`inline-block mt-1 px-2 py-1 rounded text-xs ${t.tableBg} hover:opacity-80 transition-opacity`}
       >
-        <span className={`font-semibold ${
-          eloData.tier === 'S' ? 'text-yellow-600' :
-          eloData.tier === 'A' ? 'text-purple-600' :
-          eloData.tier === 'B' ? 'text-blue-600' :
-          eloData.tier === 'C' ? 'text-green-600' :
-          t.textMuted
-        }`}>{eloData.tier || '?'}</span>
-        <span className={t.textMuted}>{eloData.rating}</span>
-        <span className={`text-green-600`}>{eloData.wins}W</span>
-        <span className={`text-red-600`}>{eloData.losses}L</span>
+        {/* Line 1: Tier and Rating */}
+        <div className="flex items-center justify-center gap-1.5">
+          <span className={`font-bold ${
+            eloData.tier === 'S' ? 'text-yellow-500' :
+            eloData.tier === 'A' ? 'text-purple-500' :
+            eloData.tier === 'B' ? 'text-blue-500' :
+            eloData.tier === 'C' ? 'text-green-500' :
+            t.textMuted
+          }`}>{eloData.tier || '?'}-Tier</span>
+          <span className={t.textFaint}>•</span>
+          <span className={t.textMuted}>{eloData.rating}</span>
+        </div>
+        {/* Line 2: Win/Loss Record */}
+        <div className="flex items-center justify-center gap-1.5 mt-0.5">
+          <span className="text-green-500 font-medium">{eloData.wins}W</span>
+          <span className={t.textFaint}>-</span>
+          <span className="text-red-500 font-medium">{eloData.losses}L</span>
+        </div>
       </a>
     );
   };
