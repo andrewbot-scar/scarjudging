@@ -3,6 +3,113 @@ import React, { useState, useEffect, useCallback } from 'react';
 // API Configuration
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
+// SCAR ELO API Configuration
+const ELO_API_BASE_URL = 'https://elo.socalattackrobots.com/api';
+const ELO_SITE_BASE_URL = 'https://elo.socalattackrobots.com';
+
+// Weight class mappings - maps common tournament name patterns to ELO weight class slugs
+const WEIGHT_CLASS_PATTERNS = [
+  { pattern: /150\s*g/i, slug: '150g', display: '150g' },
+  { pattern: /plastic\s*ant|plant/i, slug: 'plant', display: 'Plastic Ant' },
+  { pattern: /1\s*lb|antweight/i, slug: '1lb', display: '1lb' },
+  { pattern: /3\s*lb|beetleweight/i, slug: '3lb', display: '3lb' },
+  { pattern: /12\s*lb|hobbyweight/i, slug: '12lb', display: '12lb' },
+  { pattern: /30\s*lb\s*sportsman/i, slug: '30lb_sportsman', display: '30lb Sportsman' },
+  { pattern: /30\s*lb|featherweight/i, slug: '30lb', display: '30lb' },
+];
+
+// Helper to extract weight class from tournament name
+function getWeightClassFromTournament(tournamentName) {
+  if (!tournamentName) return null;
+  
+  for (const { pattern, slug, display } of WEIGHT_CLASS_PATTERNS) {
+    if (pattern.test(tournamentName)) {
+      return { slug, display };
+    }
+  }
+  return null;
+}
+
+// Helper to slugify robot name for ELO API
+function slugifyRobotName(name) {
+  if (!name) return '';
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
+    .replace(/\s+/g, '-')          // Replace spaces with hyphens
+    .replace(/-+/g, '-')           // Replace multiple hyphens with single
+    .replace(/^-|-$/g, '');        // Remove leading/trailing hyphens
+}
+
+// ELO data cache to avoid repeated API calls
+const eloCache = new Map();
+
+// Fetch robot ELO data from SCAR ELO API
+async function fetchRobotElo(robotName, weightClassSlug) {
+  if (!robotName || !weightClassSlug) return null;
+  
+  const cacheKey = `${weightClassSlug}:${robotName.toLowerCase()}`;
+  
+  // Check cache first
+  if (eloCache.has(cacheKey)) {
+    return eloCache.get(cacheKey);
+  }
+  
+  const robotSlug = slugifyRobotName(robotName);
+  if (!robotSlug) return null;
+  
+  try {
+    const response = await fetch(`${ELO_API_BASE_URL}/robot/${weightClassSlug}/${robotSlug}`);
+    if (!response.ok) {
+      // Cache null result to avoid repeated failed requests
+      eloCache.set(cacheKey, null);
+      return null;
+    }
+    
+    const data = await response.json();
+    // Add the URL to the robot's ELO page
+    data.eloUrl = `${ELO_SITE_BASE_URL}/class/${weightClassSlug}/${robotSlug}`;
+    
+    // Cache the result
+    eloCache.set(cacheKey, data);
+    return data;
+  } catch (err) {
+    console.error(`Failed to fetch ELO for ${robotName}:`, err);
+    eloCache.set(cacheKey, null);
+    return null;
+  }
+}
+
+// Fetch head-to-head data between two robots
+async function fetchHeadToHead(robot1, robot2, weightClassSlug) {
+  if (!robot1 || !robot2 || !weightClassSlug) return null;
+  
+  const cacheKey = `h2h:${weightClassSlug}:${robot1.toLowerCase()}:${robot2.toLowerCase()}`;
+  
+  if (eloCache.has(cacheKey)) {
+    return eloCache.get(cacheKey);
+  }
+  
+  try {
+    const response = await fetch(
+      `${ELO_API_BASE_URL}/class/${weightClassSlug}/h2h?robot1=${encodeURIComponent(robot1)}&robot2=${encodeURIComponent(robot2)}`
+    );
+    if (!response.ok) {
+      eloCache.set(cacheKey, null);
+      return null;
+    }
+    
+    const data = await response.json();
+    eloCache.set(cacheKey, data);
+    return data;
+  } catch (err) {
+    console.error(`Failed to fetch H2H for ${robot1} vs ${robot2}:`, err);
+    eloCache.set(cacheKey, null);
+    return null;
+  }
+}
+
 // Local Storage Keys (for local preferences only)
 const STORAGE_KEYS = {
   DARK_MODE: 'scar_dark_mode',
@@ -379,6 +486,12 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
   const [judgeScores, setJudgeScores] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [eloDataA, setEloDataA] = useState(null);
+  const [eloDataB, setEloDataB] = useState(null);
+  const [h2hData, setH2hData] = useState(null);
+
+  // Get weight class from tournament name
+  const weightClass = match?.tournamentName ? getWeightClassFromTournament(match.tournamentName) : null;
 
   useEffect(() => {
     const fetchScores = async () => {
@@ -407,6 +520,33 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
     fetchScores();
   }, [match]);
 
+  // Fetch ELO data for both competitors
+  useEffect(() => {
+    const fetchEloData = async () => {
+      if (!match || !weightClass?.slug) return;
+      
+      // Fetch ELO for competitor A
+      if (match.competitorA) {
+        const dataA = await fetchRobotElo(match.competitorA, weightClass.slug);
+        setEloDataA(dataA);
+      }
+      
+      // Fetch ELO for competitor B
+      if (match.competitorB) {
+        const dataB = await fetchRobotElo(match.competitorB, weightClass.slug);
+        setEloDataB(dataB);
+      }
+      
+      // Fetch head-to-head data
+      if (match.competitorA && match.competitorB) {
+        const h2h = await fetchHeadToHead(match.competitorA, match.competitorB, weightClass.slug);
+        setH2hData(h2h);
+      }
+    };
+
+    fetchEloData();
+  }, [match, weightClass]);
+
   if (!match) return null;
 
   const judges = judgeScores?.judges ? Object.entries(judgeScores.judges) : [];
@@ -417,6 +557,50 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
     const totalA = (scores.aggression || 0) + (scores.damage || 0) + (scores.control || 0);
     const totalB = 11 - totalA;
     return { a: totalA, b: totalB };
+  };
+
+  // Calculate H2H record
+  const getH2HRecord = () => {
+    if (!h2hData?.events) return null;
+    let winsA = 0, winsB = 0;
+    h2hData.events.forEach(event => {
+      event.fights?.forEach(fight => {
+        if (fight.winner?.toLowerCase() === match.competitorA?.toLowerCase()) winsA++;
+        else if (fight.winner?.toLowerCase() === match.competitorB?.toLowerCase()) winsB++;
+      });
+    });
+    if (winsA === 0 && winsB === 0) return null;
+    return { a: winsA, b: winsB };
+  };
+
+  const h2hRecord = getH2HRecord();
+
+  // Helper to render ELO badge
+  const renderEloBadge = (eloData, robotName) => {
+    if (!eloData) return null;
+    const robotSlug = slugifyRobotName(robotName);
+    const eloUrl = `${ELO_SITE_BASE_URL}/class/${weightClass?.slug}/${robotSlug}`;
+    
+    return (
+      <a 
+        href={eloUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs ${t.tableBg} hover:opacity-80 transition-opacity`}
+      >
+        <span className={`font-semibold ${
+          eloData.tier === 'S' ? 'text-yellow-600' :
+          eloData.tier === 'A' ? 'text-purple-600' :
+          eloData.tier === 'B' ? 'text-blue-600' :
+          eloData.tier === 'C' ? 'text-green-600' :
+          t.textMuted
+        }`}>{eloData.tier || '?'}</span>
+        <span className={t.textMuted}>{eloData.rating}</span>
+        <span className={`text-green-600`}>{eloData.wins}W</span>
+        <span className={`text-red-600`}>{eloData.losses}L</span>
+      </a>
+    );
   };
 
   return (
@@ -445,6 +629,18 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
         </div>
 
         <div className={`px-5 py-4 border-b ${t.divider}`}>
+          {/* Head-to-Head Record */}
+          {h2hRecord && (
+            <div className={`mb-3 p-2 rounded-lg ${t.tableBg} text-center`}>
+              <span className={`text-xs ${t.textFaint} uppercase tracking-wide`}>Head-to-Head Record</span>
+              <div className="flex items-center justify-center gap-3 mt-1">
+                <span className={`font-bold ${t.blueText}`}>{h2hRecord.a}</span>
+                <span className={`text-xs ${t.textFaint}`}>-</span>
+                <span className={`font-bold ${t.redText}`}>{h2hRecord.b}</span>
+              </div>
+            </div>
+          )}
+          
           <div className="grid grid-cols-3 items-center gap-4">
             <div className="text-center">
               <div className={`w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-lg overflow-hidden mb-2 ${match.winner === match.competitorA ? 'ring-2 ring-green-500' : ''}`}>
@@ -463,7 +659,20 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
                   <span className="text-2xl sm:text-3xl font-bold text-blue-600">{match.competitorA?.[0] || '?'}</span>
                 </div>
               </div>
-              <p className={`font-semibold ${t.text} text-sm`}>{match.competitorA || 'TBD'}</p>
+              {match.competitorA && weightClass?.slug ? (
+                <a 
+                  href={`${ELO_SITE_BASE_URL}/class/${weightClass.slug}/${slugifyRobotName(match.competitorA)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className={`font-semibold ${t.text} text-sm hover:underline`}
+                >
+                  {match.competitorA}
+                </a>
+              ) : (
+                <p className={`font-semibold ${t.text} text-sm`}>{match.competitorA || 'TBD'}</p>
+              )}
+              {eloDataA && renderEloBadge(eloDataA, match.competitorA)}
               {match.status === 'completed' && (
                 <p className={`text-xl font-bold ${t.blueText} mt-1`}>{match.scores?.a || 0}</p>
               )}
@@ -488,7 +697,20 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
                   <span className="text-2xl sm:text-3xl font-bold text-red-600">{match.competitorB?.[0] || '?'}</span>
                 </div>
               </div>
-              <p className={`font-semibold ${t.text} text-sm`}>{match.competitorB || 'TBD'}</p>
+              {match.competitorB && weightClass?.slug ? (
+                <a 
+                  href={`${ELO_SITE_BASE_URL}/class/${weightClass.slug}/${slugifyRobotName(match.competitorB)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className={`font-semibold ${t.text} text-sm hover:underline`}
+                >
+                  {match.competitorB}
+                </a>
+              ) : (
+                <p className={`font-semibold ${t.text} text-sm`}>{match.competitorB || 'TBD'}</p>
+              )}
+              {eloDataB && renderEloBadge(eloDataB, match.competitorB)}
               {match.status === 'completed' && (
                 <p className={`text-xl font-bold ${t.redText} mt-1`}>{match.scores?.b || 0}</p>
               )}
@@ -604,6 +826,121 @@ const RobotAvatar = ({ name, robotImages, size = 'md', colorClass = 'bg-gray-100
   );
 };
 
+// Robot Link Component - Clickable robot name with ELO info tooltip
+const RobotLink = ({ name, weightClass, isWinner, isPlaceholder, className, theme }) => {
+  const t = themes[theme];
+  const [eloData, setEloData] = useState(null);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  // Fetch ELO data on hover
+  const handleMouseEnter = async () => {
+    if (!name || isPlaceholder || !weightClass?.slug) return;
+    
+    setShowTooltip(true);
+    
+    if (eloData === null && !isLoading) {
+      setIsLoading(true);
+      const data = await fetchRobotElo(name, weightClass.slug);
+      setEloData(data || false); // false means "tried but not found"
+      setIsLoading(false);
+    }
+  };
+  
+  const handleMouseLeave = () => {
+    setShowTooltip(false);
+  };
+  
+  const handleClick = (e) => {
+    if (!name || isPlaceholder || !weightClass?.slug) return;
+    
+    // Open ELO page in new tab
+    const robotSlug = slugifyRobotName(name);
+    if (robotSlug) {
+      e.stopPropagation(); // Prevent match card click
+      window.open(`${ELO_SITE_BASE_URL}/class/${weightClass.slug}/${robotSlug}`, '_blank');
+    }
+  };
+  
+  // If placeholder or no weight class, render without link
+  if (isPlaceholder || !weightClass?.slug) {
+    return <span className={className}>{name}</span>;
+  }
+  
+  return (
+    <span 
+      className="relative inline-block"
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
+      <span 
+        onClick={handleClick}
+        className={`${className} cursor-pointer hover:underline`}
+        title="Click to view ELO stats"
+      >
+        {name}
+        {isWinner && ' ✓'}
+      </span>
+      
+      {/* ELO Tooltip */}
+      {showTooltip && (
+        <div className={`absolute z-50 left-0 top-full mt-1 p-2 rounded-lg shadow-lg border min-w-[180px] ${
+          theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
+        }`}>
+          {isLoading ? (
+            <div className={`text-xs ${t.textMuted}`}>Loading ELO data...</div>
+          ) : eloData ? (
+            <div className="text-xs space-y-1">
+              <div className="flex justify-between items-center gap-3">
+                <span className={t.textMuted}>Rating:</span>
+                <span className={`font-bold ${t.text}`}>{eloData.rating}</span>
+              </div>
+              {eloData.tier && (
+                <div className="flex justify-between items-center gap-3">
+                  <span className={t.textMuted}>Tier:</span>
+                  <span className={`font-semibold px-1.5 py-0.5 rounded text-xs ${
+                    eloData.tier === 'S' ? 'bg-yellow-100 text-yellow-800' :
+                    eloData.tier === 'A' ? 'bg-purple-100 text-purple-800' :
+                    eloData.tier === 'B' ? 'bg-blue-100 text-blue-800' :
+                    eloData.tier === 'C' ? 'bg-green-100 text-green-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>{eloData.tier}</span>
+                </div>
+              )}
+              {eloData.rank && (
+                <div className="flex justify-between items-center gap-3">
+                  <span className={t.textMuted}>Rank:</span>
+                  <span className={`font-semibold ${t.text}`}>#{eloData.rank}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center gap-3">
+                <span className={t.textMuted}>Record:</span>
+                <span className={t.text}>
+                  <span className="text-green-600">{eloData.wins}W</span>
+                  {' - '}
+                  <span className="text-red-600">{eloData.losses}L</span>
+                </span>
+              </div>
+              {eloData.team && (
+                <div className={`pt-1 mt-1 border-t ${t.divider}`}>
+                  <span className={t.textFaint}>{eloData.team}</span>
+                </div>
+              )}
+              <div className={`pt-1 text-blue-500 text-xs`}>
+                Click to view full stats →
+              </div>
+            </div>
+          ) : (
+            <div className={`text-xs ${t.textMuted}`}>
+              Not found in ELO database
+            </div>
+          )}
+        </div>
+      )}
+    </span>
+  );
+};
+
 // Split Point Slider Component - Mobile Optimized
 const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) => {
   const t = themes[theme];
@@ -649,7 +986,7 @@ const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) =>
 };
 
 // Match Card Component - Mobile Optimized
-const MatchCard = ({ match, onClick, showTournament = false, displayStatus, theme }) => {
+const MatchCard = ({ match, onClick, showTournament = false, displayStatus, weightClass, theme }) => {
   const t = themes[theme];
   
   // Use displayStatus if provided, otherwise fall back to basic status check
@@ -726,8 +1063,17 @@ const MatchCard = ({ match, onClick, showTournament = false, displayStatus, them
                 : match.winner === match.competitorA ? `font-semibold ${t.winnerText}` 
                 : `font-semibold ${t.text}`
             }`}>
-              {compA.text}
-              {match.winner === match.competitorA && match.competitorA && ' ✓'}
+              {compA.isPlaceholder ? (
+                compA.text
+              ) : (
+                <RobotLink
+                  name={compA.text}
+                  weightClass={weightClass}
+                  isWinner={match.winner === match.competitorA}
+                  isPlaceholder={false}
+                  theme={theme}
+                />
+              )}
             </span>
             {match.status === 'completed' && match.winMethod === 'points' && (
               <span className={`text-sm font-mono ${t.textMuted} flex-shrink-0`}>{match.scores?.a}</span>
@@ -742,8 +1088,17 @@ const MatchCard = ({ match, onClick, showTournament = false, displayStatus, them
                 : match.winner === match.competitorB ? `font-semibold ${t.winnerText}` 
                 : `font-semibold ${t.text}`
             }`}>
-              {compB.text}
-              {match.winner === match.competitorB && match.competitorB && ' ✓'}
+              {compB.isPlaceholder ? (
+                compB.text
+              ) : (
+                <RobotLink
+                  name={compB.text}
+                  weightClass={weightClass}
+                  isWinner={match.winner === match.competitorB}
+                  isPlaceholder={false}
+                  theme={theme}
+                />
+              )}
             </span>
             {match.status === 'completed' && match.winMethod === 'points' && (
               <span className={`text-sm font-mono ${t.textMuted} flex-shrink-0`}>{match.scores?.b}</span>
@@ -855,6 +1210,11 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatch
   const currentTournament = tournaments[selectedTournamentIndex];
   const matches = currentTournament?.matches || [];
   
+  // Extract weight class from tournament name for ELO lookup
+  const currentWeightClass = currentTournament?.tournament?.name 
+    ? getWeightClassFromTournament(currentTournament.tournament.name)
+    : null;
+  
   const winnersMatches = matches.filter(m => m.bracket === 'winners');
   const losersMatches = matches.filter(m => m.bracket === 'losers');
   
@@ -912,7 +1272,7 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatch
                 </p>
                 <div className="space-y-2 sm:space-y-3 flex-1 flex flex-col justify-around">
                   {roundMatches.map(match => (
-                    <MatchCard key={match.id} match={match} onClick={() => onMatchClick(match)} displayStatus={getMatchDisplayStatus(match)} theme={theme} />
+                    <MatchCard key={match.id} match={match} onClick={() => onMatchClick(match)} displayStatus={getMatchDisplayStatus(match)} weightClass={currentWeightClass} theme={theme} />
                   ))}
                 </div>
               </div>
@@ -937,7 +1297,7 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatch
                   </p>
                   <div className="space-y-2 sm:space-y-3 flex-1 flex flex-col justify-around">
                     {roundMatches.map(match => (
-                      <MatchCard key={match.id} match={match} onClick={() => onMatchClick(match)} displayStatus={getMatchDisplayStatus(match)} theme={theme} />
+                      <MatchCard key={match.id} match={match} onClick={() => onMatchClick(match)} displayStatus={getMatchDisplayStatus(match)} weightClass={currentWeightClass} theme={theme} />
                     ))}
                   </div>
                 </div>
@@ -1149,6 +1509,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
             const statusB = getRepairStatus(match.competitorB);
             const bothReady = statusA.ready && statusB.ready;
             const fighting = isNowFighting(match);
+            const weightClass = getWeightClassFromTournament(match.tournamentName);
             
             return (
               <div 
@@ -1199,7 +1560,9 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                       )}
                     </div>
                     <div>
-                      <p className={`font-semibold ${t.text}`}>{match.competitorA}</p>
+                      <p className={`font-semibold ${t.text}`}>
+                        <RobotLink name={match.competitorA} weightClass={weightClass} theme={theme} />
+                      </p>
                       {!statusA.ready && (
                         <p className="text-red-500 font-mono text-sm">{formatCountdown(statusA.remaining)}</p>
                       )}
@@ -1215,7 +1578,9 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                   {/* Competitor B */}
                   <div className="flex items-center gap-3 justify-end text-right">
                     <div>
-                      <p className={`font-semibold ${t.text}`}>{match.competitorB}</p>
+                      <p className={`font-semibold ${t.text}`}>
+                        <RobotLink name={match.competitorB} weightClass={weightClass} theme={theme} />
+                      </p>
                       {!statusB.ready && (
                         <p className="text-red-500 font-mono text-sm">{formatCountdown(statusB.remaining)}</p>
                       )}
@@ -1340,7 +1705,9 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
         </div>
         
         <div className="divide-y divide-gray-200 dark:divide-gray-700">
-          {sortedMatches.map(match => (
+          {sortedMatches.map(match => {
+            const weightClass = getWeightClassFromTournament(match.tournamentName);
+            return (
             <div 
               key={`${match.tournamentId}-${match.id}`}
               onClick={() => onMatchClick(match)}
@@ -1362,13 +1729,21 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className={`font-semibold ${match.winner === match.competitorA ? t.winnerText : t.text} text-sm truncate`}>
-                        {match.competitorA}
-                        {match.winner === match.competitorA && ' ✓'}
+                        <RobotLink 
+                          name={match.competitorA} 
+                          weightClass={weightClass} 
+                          isWinner={match.winner === match.competitorA}
+                          theme={theme} 
+                        />
                       </span>
                       <span className={`text-xs ${t.textFaint}`}>vs</span>
                       <span className={`font-semibold ${match.winner === match.competitorB ? t.winnerText : t.text} text-sm truncate`}>
-                        {match.competitorB}
-                        {match.winner === match.competitorB && ' ✓'}
+                        <RobotLink 
+                          name={match.competitorB} 
+                          weightClass={weightClass} 
+                          isWinner={match.winner === match.competitorB}
+                          theme={theme} 
+                        />
                       </span>
                     </div>
                   </div>
@@ -1399,7 +1774,8 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
                 </p>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
