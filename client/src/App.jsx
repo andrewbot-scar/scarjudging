@@ -477,7 +477,7 @@ const StatusBadge = ({ status, winMethod, scores, theme }) => {
     return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.pendingBg} ${t.pendingText}`}>Upcoming</span>;
   }
   if (status === 'active') {
-    return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.liveBg} ${t.liveText}`}>● Live</span>;
+    return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.liveBg} ${t.liveText}`}>â—Â Live</span>;
   }
   // Detect KO: either winMethod is 'ko' OR one side has 0 points (covers both old 0-0 and new 33-0 format)
   if (winMethod === 'ko' || (scores && (scores.a === 0 || scores.b === 0))) {
@@ -603,7 +603,7 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
             eloData.tier === 'C' ? 'text-green-500' :
             t.textMuted
           }`}>{eloData.tier || '?'}-Tier</span>
-          <span className={t.textFaint}>•</span>
+          <span className={t.textFaint}>â€¢</span>
           <span className={t.textMuted}>{eloData.rating}</span>
         </div>
         {/* Line 2: Win/Loss Record */}
@@ -889,7 +889,7 @@ const RobotLink = ({ name, weightClass, isWinner, isPlaceholder, className, them
         title="Click to view ELO stats"
       >
         {name}
-        {isWinner && ' ✓'}
+        {isWinner && ' âœ“'}
       </span>
       
       {/* ELO Tooltip */}
@@ -937,7 +937,7 @@ const RobotLink = ({ name, weightClass, isWinner, isPlaceholder, className, them
                 </div>
               )}
               <div className={`pt-1 text-blue-500 text-xs`}>
-                Click to view full stats →
+                Click to view full stats â†’
               </div>
             </div>
           ) : (
@@ -951,11 +951,78 @@ const RobotLink = ({ name, weightClass, isWinner, isPlaceholder, className, them
   );
 };
 
-// Split Point Slider Component - Mobile Optimized
+// Split Point Slider Component - Mobile Optimized with Intuitive Behavior and Haptic Feedback
 const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) => {
   const t = themes[theme];
   const valueB = maxPoints - valueA;
   const percentage = (valueA / maxPoints) * 100;
+  const [lastValue, setLastValue] = useState(valueA);
+  
+  // Haptic feedback helper
+  const triggerHaptic = (type = 'light') => {
+    // Check if haptic feedback is available (iOS Safari, Android Chrome)
+    if (window.navigator && window.navigator.vibrate) {
+      // Android vibration API
+      switch(type) {
+        case 'light':
+          window.navigator.vibrate(10);
+          break;
+        case 'medium':
+          window.navigator.vibrate(20);
+          break;
+        case 'heavy':
+          window.navigator.vibrate(30);
+          break;
+        default:
+          window.navigator.vibrate(10);
+      }
+    }
+    
+    // iOS Haptic Feedback (requires user gesture context)
+    if (window.AudioContext || window.webkitAudioContext) {
+      try {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        
+        oscillator.frequency.value = 200;
+        gainNode.gain.value = 0.01; // Very quiet, just for haptic trigger
+        
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.01);
+      } catch (e) {
+        // Haptics not supported, fail silently
+      }
+    }
+  };
+  
+  const handleChange = (newValue) => {
+    const value = parseInt(newValue);
+    
+    // Trigger haptic feedback on value change
+    if (value !== lastValue) {
+      // Light haptic for each point change
+      triggerHaptic('light');
+      
+      // Medium haptic when crossing the midpoint
+      const midpoint = Math.floor(maxPoints / 2);
+      if ((lastValue < midpoint && value >= midpoint) || (lastValue > midpoint && value <= midpoint)) {
+        triggerHaptic('medium');
+      }
+      
+      // Heavy haptic at extremes (0 or max)
+      if (value === 0 || value === maxPoints) {
+        triggerHaptic('heavy');
+      }
+      
+      setLastValue(value);
+    }
+    
+    onChange(value);
+  };
   
   return (
     <div className="mb-6 sm:mb-5">
@@ -966,20 +1033,47 @@ const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) =>
       
       <div className="flex items-center gap-3 sm:gap-4">
         <div className="w-10 sm:w-12 text-center">
-          <span className={`text-xl sm:text-2xl font-bold ${valueA > valueB ? t.blueText : t.textFaint}`}>{valueA}</span>
+          <span className={`text-xl sm:text-2xl font-bold transition-colors ${valueA > valueB ? t.blueText : t.textFaint}`}>{valueA}</span>
         </div>
         
-        <div className="flex-1 relative py-2">
-          <div className={`h-3 sm:h-2 ${t.sliderBg} rounded-full overflow-hidden`}>
-            <div className={`h-full ${t.sliderFill} transition-all duration-150`} style={{ width: `${percentage}%` }} />
+        <div className="flex-1 relative py-3">
+          {/* Track background */}
+          <div className={`h-2 ${t.sliderBg} rounded-full relative overflow-visible`}>
+            {/* Blue fill from left */}
+            <div 
+              className="absolute left-0 top-0 h-full bg-blue-500 rounded-full transition-all duration-150"
+              style={{ width: `${percentage}%` }}
+            />
+            {/* Red fill from right */}
+            <div 
+              className="absolute right-0 top-0 h-full bg-red-500 rounded-full transition-all duration-150"
+              style={{ width: `${100 - percentage}%` }}
+            />
           </div>
+          
+          {/* Circular thumb with scale animation on interaction */}
+          <div 
+            className="absolute top-1/2 -translate-y-1/2 pointer-events-none transition-all duration-150"
+            style={{ left: `${percentage}%`, transform: 'translate(-50%, -50%)' }}
+          >
+            <div className={`w-6 h-6 rounded-full border-3 shadow-lg transition-transform active:scale-110 ${
+              disabled ? 'bg-gray-400 border-gray-500' : 'bg-white border-gray-700'
+            }`} />
+          </div>
+          
+          {/* Hidden input slider */}
           <input
-            type="range" min={0} max={maxPoints} value={valueA}
-            onChange={(e) => onChange(parseInt(e.target.value))}
+            type="range" 
+            min={0} 
+            max={maxPoints} 
+            value={valueA}
+            onChange={(e) => handleChange(e.target.value)}
             disabled={disabled}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
             style={{ touchAction: 'none' }}
           />
+          
+          {/* Tick marks */}
           <div className="flex justify-between mt-2 px-0.5">
             {[...Array(maxPoints + 1)].map((_, i) => (
               <div key={i} className={`w-1 sm:w-0.5 h-2 sm:h-1.5 ${t.tickMark} rounded-full`} />
@@ -988,7 +1082,7 @@ const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) =>
         </div>
         
         <div className="w-10 sm:w-12 text-center">
-          <span className={`text-xl sm:text-2xl font-bold ${valueB > valueA ? t.redText : t.textFaint}`}>{valueB}</span>
+          <span className={`text-xl sm:text-2xl font-bold transition-colors ${valueB > valueA ? t.redText : t.textFaint}`}>{valueB}</span>
         </div>
       </div>
     </div>
@@ -1032,11 +1126,11 @@ const MatchCard = ({ match, onClick, showTournament = false, displayStatus, weig
     
     switch (status) {
       case 'fighting':
-        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">● NOW FIGHTING</span>;
+        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">â—Â NOW FIGHTING</span>;
       case 'onDeck':
         return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">On Deck</span>;
       case 'repairing':
-        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">⏱ Repairing</span>;
+        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">â± Repairing</span>;
       default:
         return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.pendingBg} ${t.pendingText}`}>Upcoming</span>;
     }
@@ -1212,7 +1306,7 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatch
     return (
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-6 sm:p-8 text-center`}>
         <h3 className={`text-lg font-bold ${t.text} mb-2`}>No Tournaments Connected</h3>
-        <p className={t.textMuted}>Go to Admin → Tournaments to add tournament URLs</p>
+        <p className={t.textMuted}>Go to Admin â†’ Tournaments to add tournament URLs</p>
       </div>
     );
   }
@@ -1537,7 +1631,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                   </div>
                   {fighting ? (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">
-                      ● NOW FIGHTING
+                      â—Â NOW FIGHTING
                     </span>
                   ) : bothReady ? (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-700">
@@ -1545,7 +1639,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                     </span>
                   ) : (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">
-                      ⏱ Repairing
+                      â± Repairing
                     </span>
                   )}
                 </div>
@@ -1577,7 +1671,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                         <p className="text-red-500 font-mono text-sm">{formatCountdown(statusA.remaining)}</p>
                       )}
                       {statusA.ready && robotLastFight[match.competitorA] && (
-                        <p className="text-green-500 text-xs">✓ Ready</p>
+                        <p className="text-green-500 text-xs">âœ“ Ready</p>
                       )}
                       {!robotLastFight[match.competitorA] && (
                         <p className={`text-xs ${t.textFaint}`}>No recent fight</p>
@@ -1595,7 +1689,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                         <p className="text-red-500 font-mono text-sm">{formatCountdown(statusB.remaining)}</p>
                       )}
                       {statusB.ready && robotLastFight[match.competitorB] && (
-                        <p className="text-green-500 text-xs">✓ Ready</p>
+                        <p className="text-green-500 text-xs">âœ“ Ready</p>
                       )}
                       {!robotLastFight[match.competitorB] && (
                         <p className={`text-xs ${t.textFaint}`}>No recent fight</p>
@@ -2031,9 +2125,9 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
 
   // Get status indicator for dropdown
   const getMatchIndicator = (match) => {
-    if (isMatchFighting(match)) return '🟡'; // Yellow for NOW FIGHTING
-    if (isMatchReady(match)) return '🟢'; // Green if both robots ready
-    return '🔴'; // Red if either robot still repairing
+    if (isMatchFighting(match)) return 'ðŸŸ¡'; // Yellow for NOW FIGHTING
+    if (isMatchReady(match)) return 'ðŸŸ¢'; // Green if both robots ready
+    return 'ðŸ”´'; // Red if either robot still repairing
   };
 
   return (
@@ -2067,7 +2161,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
 
       {submitResult?.finalized && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-          <p className="text-green-700 font-semibold">🏆 Match Complete!</p>
+          <p className="text-green-700 font-semibold">ðŸ† Match Complete!</p>
           <p className={`text-sm ${t.textMuted} mt-1`}>
             Winner: {submitResult.result.winMethod === 'ko' ? 'KO' : `${submitResult.result.scoreA}-${submitResult.result.scoreB}`}
           </p>
@@ -2105,7 +2199,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
                     }`}
                     title={`Judge ${num}${hasJudgeSubmitted ? ' (submitted)' : isCurrentJudge ? ' (you)' : ''}`}
                   >
-                    {hasJudgeSubmitted ? '✓' : num}
+                    {hasJudgeSubmitted ? 'âœ“' : num}
                   </div>
                 );
               })}
@@ -2192,7 +2286,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
               </div>
             </div>
             <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorA || 'TBD'}</p>
-            <p className={`text-xl sm:text-2xl font-bold ${t.blueText} mt-1`}>{isKO ? '—' : totalA}</p>
+            <p className={`text-xl sm:text-2xl font-bold ${t.blueText} mt-1`}>{isKO ? 'â€”' : totalA}</p>
           </div>
           <div className="text-center">
             <span className={`${t.textFaint} font-medium text-sm`}>vs</span>
@@ -2215,7 +2309,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
               </div>
             </div>
             <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorB || 'TBD'}</p>
-            <p className={`text-xl sm:text-2xl font-bold ${t.redText} mt-1`}>{isKO ? '—' : totalB}</p>
+            <p className={`text-xl sm:text-2xl font-bold ${t.redText} mt-1`}>{isKO ? 'â€”' : totalB}</p>
           </div>
         </div>
       </div>
@@ -2285,7 +2379,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
         hasSubmitted ? (
           <div className="space-y-3">
             <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-              <p className="text-green-700 font-semibold">✓ Scores Submitted</p>
+              <p className="text-green-700 font-semibold">âœ“ Scores Submitted</p>
               <p className={`text-sm ${t.textFaint} mt-1`}>
                 Waiting for {3 - (submitResult?.judgeCount || 1)} more judge(s)...
               </p>
@@ -2460,7 +2554,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
       await onSaveToServer(localEventId.trim(), localEventName.trim(), localDiscordWebhookUrl.trim());
       // Then test the webhook
       await api.testDiscordWebhook(localEventId.trim());
-      setSyncStatus({ success: true, message: '✓ Test message sent to Discord!' });
+      setSyncStatus({ success: true, message: 'âœ“ Test message sent to Discord!' });
     } catch (err) {
       setSyncStatus({ success: false, message: `Discord test failed: ${err.message}` });
     } finally {
@@ -2483,7 +2577,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
             className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold capitalize transition-colors ${
               selectedTab === tab ? 'bg-gray-900 text-white' : `${t.textMuted} hover:${t.text}`
             }`}>
-            {tab === 'images' ? 'Robot Images' : tab === 'discord' ? '🔔 Discord' : tab}
+            {tab === 'images' ? 'Robot Images' : tab === 'discord' ? 'ðŸ”” Discord' : tab}
           </button>
         ))}
       </div>
@@ -2593,7 +2687,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                 disabled={isLoading}
                 className={`px-3 py-1.5 text-sm font-semibold ${t.textMuted} ${t.hoverBg} rounded-lg transition-colors disabled:opacity-50`}
               >
-                {isLoading ? 'Refreshing...' : '↻ Refresh All'}
+                {isLoading ? 'Refreshing...' : 'â†» Refresh All'}
               </button>
             )}
           </div>
@@ -2634,7 +2728,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                       <p className={`text-xs ${t.textFaint}`}>{url}</p>
                       {tourneyData && (
                         <p className={`text-xs ${t.textMuted} mt-1`}>
-                          Status: {tourneyData.tournament.status} • {tourneyData.matches?.length || 0} matches
+                          Status: {tourneyData.tournament.status} â€¢ {tourneyData.matches?.length || 0} matches
                         </p>
                       )}
                     </div>
@@ -2686,7 +2780,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                 disabled={isLoading || !newRceUrl.trim()}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
               >
-                {isLoading ? 'Loading...' : '📷 Import'}
+                {isLoading ? 'Loading...' : 'ðŸ“· Import'}
               </button>
             </div>
             <p className={`text-xs ${t.textFaint} mt-1`}>
@@ -2760,7 +2854,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
               className={`w-full px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`} 
             />
             <p className={`text-xs ${t.textFaint} mt-1`}>
-              Create a webhook in your Discord server: Server Settings → Integrations → Webhooks → New Webhook
+              Create a webhook in your Discord server: Server Settings â†’ Integrations â†’ Webhooks â†’ New Webhook
             </p>
           </div>
 
@@ -2770,14 +2864,14 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
               disabled={isLoading || !localDiscordWebhookUrl.trim() || !localEventId.trim()}
               className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? 'Testing...' : '🧪 Test Webhook'}
+              {isLoading ? 'Testing...' : 'ðŸ§ª Test Webhook'}
             </button>
             <button 
               onClick={handleSaveEvent}
               disabled={isLoading || !localEventId.trim()}
               className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? 'Saving...' : '💾 Save Settings'}
+              {isLoading ? 'Saving...' : 'ðŸ’¾ Save Settings'}
             </button>
           </div>
 
@@ -2785,21 +2879,21 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
             <p className={`text-sm font-medium ${t.textMuted} mb-2`}>How it works</p>
             <div className="space-y-2">
               <div className={`${t.tableBg} rounded-lg p-3 flex items-start gap-3`}>
-                <span className="text-lg">1️⃣</span>
+                <span className="text-lg">1ï¸âƒ£</span>
                 <div>
                   <p className={`text-sm ${t.text}`}>Create a webhook in Discord</p>
-                  <p className={`text-xs ${t.textFaint}`}>Server Settings → Integrations → Webhooks</p>
+                  <p className={`text-xs ${t.textFaint}`}>Server Settings â†’ Integrations â†’ Webhooks</p>
                 </div>
               </div>
               <div className={`${t.tableBg} rounded-lg p-3 flex items-start gap-3`}>
-                <span className="text-lg">2️⃣</span>
+                <span className="text-lg">2ï¸âƒ£</span>
                 <div>
                   <p className={`text-sm ${t.text}`}>Paste the webhook URL above</p>
                   <p className={`text-xs ${t.textFaint}`}>Then click "Test Webhook" to verify</p>
                 </div>
               </div>
               <div className={`${t.tableBg} rounded-lg p-3 flex items-start gap-3`}>
-                <span className="text-lg">3️⃣</span>
+                <span className="text-lg">3ï¸âƒ£</span>
                 <div>
                   <p className={`text-sm ${t.text}`}>Match results posted automatically</p>
                   <p className={`text-xs ${t.textFaint}`}>Winner, loser, score, and KO/Decision status</p>
@@ -2811,7 +2905,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
           {localDiscordWebhookUrl && (
             <div className={`${t.tableBg} rounded-lg p-3`}>
               <div className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
+                <span className="text-green-500">âœ“</span>
                 <span className={`text-sm ${t.text}`}>Webhook configured</span>
               </div>
               <p className={`text-xs ${t.textFaint} mt-1`}>
@@ -2837,14 +2931,14 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
             disabled={isLoading || !localEventId.trim() || tournamentUrls.length === 0}
             className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'Saving...' : '💾 Save Event to Server'}
+            {isLoading ? 'Saving...' : 'ðŸ’¾ Save Event to Server'}
           </button>
 
           {localEventId && (
             <>
               {/* Judge Link */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textMuted}`}>🎯 Judge Link</label>
+                <label className={`block text-sm font-medium ${t.textMuted}`}>ðŸŽ¯ Judge Link</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -2856,7 +2950,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     onClick={handleCopyLink}
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    📋 Copy
+                    ðŸ“‹ Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
@@ -2866,7 +2960,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
 
               {/* Spectator Link - Subdomain */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textMuted}`}>👀 Spectator Link (Recommended)</label>
+                <label className={`block text-sm font-medium ${t.textMuted}`}>ðŸ‘€ Spectator Link (Recommended)</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -2881,7 +2975,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     }}
                     className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    📋 Copy
+                    ðŸ“‹ Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
@@ -2891,7 +2985,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
 
               {/* Legacy Spectator Link */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textFaint}`}>👀 Spectator Link (Legacy)</label>
+                <label className={`block text-sm font-medium ${t.textFaint}`}>ðŸ‘€ Spectator Link (Legacy)</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -2906,7 +3000,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     }}
                     className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    📋 Copy
+                    ðŸ“‹ Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
@@ -3442,7 +3536,7 @@ export default function TournamentJudgingApp() {
               <div>Built for <a href="https://www.socalattackrobots.com/" className={t.blueText}>SCAR</a></div>
               <div className="flex items-center gap-2 sm:gap-4">
                 <span>{tournaments.length} tournament{tournaments.length !== 1 ? 's' : ''}</span>
-                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline">â€¢</span>
                 <span className="hidden sm:inline">Shareable via URL</span>
               </div>
             </div>
