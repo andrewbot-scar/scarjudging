@@ -7,6 +7,12 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api
 const ELO_API_BASE_URL = 'https://elo.socalattackrobots.com/api';
 const ELO_SITE_BASE_URL = 'https://elo.socalattackrobots.com';
 
+// Helper to build ELO robot page URL
+function getEloRobotUrl(weightClassSlug, robotName) {
+  const robotSlug = slugifyRobotName(robotName);
+  return `${ELO_SITE_BASE_URL}/class/${weightClassSlug}/robot/${robotSlug}`;
+}
+
 // Weight class mappings - maps common tournament name patterns to ELO weight class slugs
 const WEIGHT_CLASS_PATTERNS = [
   { pattern: /150\s*g/i, slug: '150g', display: '150g' },
@@ -69,7 +75,7 @@ async function fetchRobotElo(robotName, weightClassSlug) {
     
     const data = await response.json();
     // Add the URL to the robot's ELO page
-    data.eloUrl = `${ELO_SITE_BASE_URL}/class/${weightClassSlug}/${robotSlug}`;
+    data.eloUrl = getEloRobotUrl(weightClassSlug, robotName);
     
     // Cache the result
     eloCache.set(cacheKey, data);
@@ -578,8 +584,7 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
   // Helper to render ELO badge
   const renderEloBadge = (eloData, robotName) => {
     if (!eloData) return null;
-    const robotSlug = slugifyRobotName(robotName);
-    const eloUrl = `${ELO_SITE_BASE_URL}/class/${weightClass?.slug}/${robotSlug}`;
+    const eloUrl = getEloRobotUrl(weightClass?.slug, robotName);
     
     return (
       <a 
@@ -661,7 +666,7 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
               </div>
               {match.competitorA && weightClass?.slug ? (
                 <a 
-                  href={`${ELO_SITE_BASE_URL}/class/${weightClass.slug}/${slugifyRobotName(match.competitorA)}`}
+                  href={getEloRobotUrl(weightClass.slug, match.competitorA)}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
@@ -699,7 +704,7 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
               </div>
               {match.competitorB && weightClass?.slug ? (
                 <a 
-                  href={`${ELO_SITE_BASE_URL}/class/${weightClass.slug}/${slugifyRobotName(match.competitorB)}`}
+                  href={getEloRobotUrl(weightClass.slug, match.competitorB)}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
@@ -855,11 +860,8 @@ const RobotLink = ({ name, weightClass, isWinner, isPlaceholder, className, them
     if (!name || isPlaceholder || !weightClass?.slug) return;
     
     // Open ELO page in new tab
-    const robotSlug = slugifyRobotName(name);
-    if (robotSlug) {
-      e.stopPropagation(); // Prevent match card click
-      window.open(`${ELO_SITE_BASE_URL}/class/${weightClass.slug}/${robotSlug}`, '_blank');
-    }
+    e.stopPropagation(); // Prevent match card click
+    window.open(getEloRobotUrl(weightClass.slug, name), '_blank');
   };
   
   // If placeholder or no weight class, render without link
