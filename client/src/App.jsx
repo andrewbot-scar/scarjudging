@@ -3,119 +3,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 // API Configuration
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
 
-// SCAR ELO API Configuration
-const ELO_API_BASE_URL = 'https://elo.socalattackrobots.com/api';
-const ELO_SITE_BASE_URL = 'https://elo.socalattackrobots.com';
-
-// Helper to build ELO robot page URL
-function getEloRobotUrl(weightClassSlug, robotName) {
-  const robotSlug = slugifyRobotName(robotName);
-  return `${ELO_SITE_BASE_URL}/class/${weightClassSlug}/robot/${robotSlug}`;
-}
-
-// Weight class mappings - maps common tournament name patterns to ELO weight class slugs
-const WEIGHT_CLASS_PATTERNS = [
-  { pattern: /150\s*g/i, slug: '150g', display: '150g' },
-  { pattern: /plastic\s*ant|plant/i, slug: 'plant', display: 'Plastic Ant' },
-  { pattern: /1\s*lb|antweight/i, slug: '1lb', display: '1lb' },
-  { pattern: /3\s*lb|beetleweight/i, slug: '3lb', display: '3lb' },
-  { pattern: /12\s*lb|hobbyweight/i, slug: '12lb', display: '12lb' },
-  { pattern: /30\s*lb\s*sportsman/i, slug: '30lb_sportsman', display: '30lb Sportsman' },
-  { pattern: /30\s*lb|featherweight/i, slug: '30lb', display: '30lb' },
-];
-
-// Helper to extract weight class from tournament name
-function getWeightClassFromTournament(tournamentName) {
-  if (!tournamentName) return null;
-  
-  for (const { pattern, slug, display } of WEIGHT_CLASS_PATTERNS) {
-    if (pattern.test(tournamentName)) {
-      return { slug, display };
-    }
-  }
-  return null;
-}
-
-// Helper to slugify robot name for ELO API
-function slugifyRobotName(name) {
-  if (!name) return '';
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
-    .replace(/\s+/g, '-')          // Replace spaces with hyphens
-    .replace(/-+/g, '-')           // Replace multiple hyphens with single
-    .replace(/^-|-$/g, '');        // Remove leading/trailing hyphens
-}
-
-// ELO data cache to avoid repeated API calls
-const eloCache = new Map();
-
-// Fetch robot ELO data from SCAR ELO API
-async function fetchRobotElo(robotName, weightClassSlug) {
-  if (!robotName || !weightClassSlug) return null;
-  
-  const cacheKey = `${weightClassSlug}:${robotName.toLowerCase()}`;
-  
-  // Check cache first
-  if (eloCache.has(cacheKey)) {
-    return eloCache.get(cacheKey);
-  }
-  
-  const robotSlug = slugifyRobotName(robotName);
-  if (!robotSlug) return null;
-  
-  try {
-    const response = await fetch(`${ELO_API_BASE_URL}/robot/${weightClassSlug}/${robotSlug}`);
-    if (!response.ok) {
-      // Cache null result to avoid repeated failed requests
-      eloCache.set(cacheKey, null);
-      return null;
-    }
-    
-    const data = await response.json();
-    // Add the URL to the robot's ELO page
-    data.eloUrl = getEloRobotUrl(weightClassSlug, robotName);
-    
-    // Cache the result
-    eloCache.set(cacheKey, data);
-    return data;
-  } catch (err) {
-    console.error(`Failed to fetch ELO for ${robotName}:`, err);
-    eloCache.set(cacheKey, null);
-    return null;
-  }
-}
-
-// Fetch head-to-head data between two robots
-async function fetchHeadToHead(robot1, robot2, weightClassSlug) {
-  if (!robot1 || !robot2 || !weightClassSlug) return null;
-  
-  const cacheKey = `h2h:${weightClassSlug}:${robot1.toLowerCase()}:${robot2.toLowerCase()}`;
-  
-  if (eloCache.has(cacheKey)) {
-    return eloCache.get(cacheKey);
-  }
-  
-  try {
-    const response = await fetch(
-      `${ELO_API_BASE_URL}/class/${weightClassSlug}/h2h?robot1=${encodeURIComponent(robot1)}&robot2=${encodeURIComponent(robot2)}`
-    );
-    if (!response.ok) {
-      eloCache.set(cacheKey, null);
-      return null;
-    }
-    
-    const data = await response.json();
-    eloCache.set(cacheKey, data);
-    return data;
-  } catch (err) {
-    console.error(`Failed to fetch H2H for ${robot1} vs ${robot2}:`, err);
-    eloCache.set(cacheKey, null);
-    return null;
-  }
-}
-
 // Local Storage Keys (for local preferences only)
 const STORAGE_KEYS = {
   DARK_MODE: 'scar_dark_mode',
@@ -204,24 +91,13 @@ const api = {
     return response.json();
   },
 
-  async saveEvent(eventId, name, tournaments, scoringCriteria, robotImages, discordWebhookUrl) {
+  async saveEvent(eventId, name, tournaments, scoringCriteria, robotImages) {
     const response = await fetch(`${API_BASE_URL}/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ eventId, name, tournaments, scoringCriteria, robotImages, discordWebhookUrl }),
+      body: JSON.stringify({ eventId, name, tournaments, scoringCriteria, robotImages }),
     });
     if (!response.ok) throw new Error('Failed to save event');
-    return response.json();
-  },
-
-  async testDiscordWebhook(eventId) {
-    const response = await fetch(`${API_BASE_URL}/events/${eventId}/test-discord`, {
-      method: 'POST',
-    });
-    if (!response.ok) {
-      const data = await response.json();
-      throw new Error(data.error || 'Failed to test Discord webhook');
-    }
     return response.json();
   },
 
@@ -477,7 +353,7 @@ const StatusBadge = ({ status, winMethod, scores, theme }) => {
     return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.pendingBg} ${t.pendingText}`}>Upcoming</span>;
   }
   if (status === 'active') {
-    return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.liveBg} ${t.liveText}`}>● Live</span>;
+    return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.liveBg} ${t.liveText}`}>â— Live</span>;
   }
   // Detect KO: either winMethod is 'ko' OR one side has 0 points (covers both old 0-0 and new 33-0 format)
   if (winMethod === 'ko' || (scores && (scores.a === 0 || scores.b === 0))) {
@@ -492,12 +368,6 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
   const [judgeScores, setJudgeScores] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [eloDataA, setEloDataA] = useState(null);
-  const [eloDataB, setEloDataB] = useState(null);
-  const [h2hData, setH2hData] = useState(null);
-
-  // Get weight class from tournament name
-  const weightClass = match?.tournamentName ? getWeightClassFromTournament(match.tournamentName) : null;
 
   useEffect(() => {
     const fetchScores = async () => {
@@ -526,33 +396,6 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
     fetchScores();
   }, [match]);
 
-  // Fetch ELO data for both competitors
-  useEffect(() => {
-    const fetchEloData = async () => {
-      if (!match || !weightClass?.slug) return;
-      
-      // Fetch ELO for competitor A
-      if (match.competitorA) {
-        const dataA = await fetchRobotElo(match.competitorA, weightClass.slug);
-        setEloDataA(dataA);
-      }
-      
-      // Fetch ELO for competitor B
-      if (match.competitorB) {
-        const dataB = await fetchRobotElo(match.competitorB, weightClass.slug);
-        setEloDataB(dataB);
-      }
-      
-      // Fetch head-to-head data
-      if (match.competitorA && match.competitorB) {
-        const h2h = await fetchHeadToHead(match.competitorA, match.competitorB, weightClass.slug);
-        setH2hData(h2h);
-      }
-    };
-
-    fetchEloData();
-  }, [match, weightClass]);
-
   if (!match) return null;
 
   const judges = judgeScores?.judges ? Object.entries(judgeScores.judges) : [];
@@ -563,57 +406,6 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
     const totalA = (scores.aggression || 0) + (scores.damage || 0) + (scores.control || 0);
     const totalB = 11 - totalA;
     return { a: totalA, b: totalB };
-  };
-
-  // Calculate H2H record
-  const getH2HRecord = () => {
-    if (!h2hData?.events) return null;
-    let winsA = 0, winsB = 0;
-    h2hData.events.forEach(event => {
-      event.fights?.forEach(fight => {
-        if (fight.winner?.toLowerCase() === match.competitorA?.toLowerCase()) winsA++;
-        else if (fight.winner?.toLowerCase() === match.competitorB?.toLowerCase()) winsB++;
-      });
-    });
-    if (winsA === 0 && winsB === 0) return null;
-    return { a: winsA, b: winsB };
-  };
-
-  const h2hRecord = getH2HRecord();
-
-  // Helper to render ELO badge - two line format
-  const renderEloBadge = (eloData, robotName) => {
-    if (!eloData) return null;
-    const eloUrl = getEloRobotUrl(weightClass?.slug, robotName);
-    
-    return (
-      <a 
-        href={eloUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => e.stopPropagation()}
-        className={`inline-block mt-1 px-2 py-1 rounded text-xs ${t.tableBg} hover:opacity-80 transition-opacity`}
-      >
-        {/* Line 1: Tier and Rating */}
-        <div className="flex items-center justify-center gap-1.5">
-          <span className={`font-bold ${
-            eloData.tier === 'S' ? 'text-yellow-500' :
-            eloData.tier === 'A' ? 'text-purple-500' :
-            eloData.tier === 'B' ? 'text-blue-500' :
-            eloData.tier === 'C' ? 'text-green-500' :
-            t.textMuted
-          }`}>{eloData.tier || '?'}-Tier</span>
-          <span className={t.textFaint}>•</span>
-          <span className={t.textMuted}>{eloData.rating}</span>
-        </div>
-        {/* Line 2: Win/Loss Record */}
-        <div className="flex items-center justify-center gap-1.5 mt-0.5">
-          <span className="text-green-500 font-medium">{eloData.wins}W</span>
-          <span className={t.textFaint}>-</span>
-          <span className="text-red-500 font-medium">{eloData.losses}L</span>
-        </div>
-      </a>
-    );
   };
 
   return (
@@ -642,18 +434,6 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
         </div>
 
         <div className={`px-5 py-4 border-b ${t.divider}`}>
-          {/* Head-to-Head Record */}
-          {h2hRecord && (
-            <div className={`mb-3 p-2 rounded-lg ${t.tableBg} text-center`}>
-              <span className={`text-xs ${t.textFaint} uppercase tracking-wide`}>Head-to-Head Record</span>
-              <div className="flex items-center justify-center gap-3 mt-1">
-                <span className={`font-bold ${t.blueText}`}>{h2hRecord.a}</span>
-                <span className={`text-xs ${t.textFaint}`}>-</span>
-                <span className={`font-bold ${t.redText}`}>{h2hRecord.b}</span>
-              </div>
-            </div>
-          )}
-          
           <div className="grid grid-cols-3 items-center gap-4">
             <div className="text-center">
               <div className={`w-20 h-20 sm:w-24 sm:h-24 mx-auto rounded-lg overflow-hidden mb-2 ${match.winner === match.competitorA ? 'ring-2 ring-green-500' : ''}`}>
@@ -672,20 +452,7 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
                   <span className="text-2xl sm:text-3xl font-bold text-blue-600">{match.competitorA?.[0] || '?'}</span>
                 </div>
               </div>
-              {match.competitorA && weightClass?.slug ? (
-                <a 
-                  href={getEloRobotUrl(weightClass.slug, match.competitorA)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className={`font-semibold ${t.text} text-sm hover:underline`}
-                >
-                  {match.competitorA}
-                </a>
-              ) : (
-                <p className={`font-semibold ${t.text} text-sm`}>{match.competitorA || 'TBD'}</p>
-              )}
-              {eloDataA && renderEloBadge(eloDataA, match.competitorA)}
+              <p className={`font-semibold ${t.text} text-sm`}>{match.competitorA || 'TBD'}</p>
               {match.status === 'completed' && (
                 <p className={`text-xl font-bold ${t.blueText} mt-1`}>{match.scores?.a || 0}</p>
               )}
@@ -710,20 +477,7 @@ const MatchDetailPopup = ({ match, onClose, robotImages, theme }) => {
                   <span className="text-2xl sm:text-3xl font-bold text-red-600">{match.competitorB?.[0] || '?'}</span>
                 </div>
               </div>
-              {match.competitorB && weightClass?.slug ? (
-                <a 
-                  href={getEloRobotUrl(weightClass.slug, match.competitorB)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className={`font-semibold ${t.text} text-sm hover:underline`}
-                >
-                  {match.competitorB}
-                </a>
-              ) : (
-                <p className={`font-semibold ${t.text} text-sm`}>{match.competitorB || 'TBD'}</p>
-              )}
-              {eloDataB && renderEloBadge(eloDataB, match.competitorB)}
+              <p className={`font-semibold ${t.text} text-sm`}>{match.competitorB || 'TBD'}</p>
               {match.status === 'completed' && (
                 <p className={`text-xl font-bold ${t.redText} mt-1`}>{match.scores?.b || 0}</p>
               )}
@@ -839,118 +593,6 @@ const RobotAvatar = ({ name, robotImages, size = 'md', colorClass = 'bg-gray-100
   );
 };
 
-// Robot Link Component - Clickable robot name with ELO info tooltip
-const RobotLink = ({ name, weightClass, isWinner, isPlaceholder, className, theme }) => {
-  const t = themes[theme];
-  const [eloData, setEloData] = useState(null);
-  const [showTooltip, setShowTooltip] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  
-  // Fetch ELO data on hover
-  const handleMouseEnter = async () => {
-    if (!name || isPlaceholder || !weightClass?.slug) return;
-    
-    setShowTooltip(true);
-    
-    if (eloData === null && !isLoading) {
-      setIsLoading(true);
-      const data = await fetchRobotElo(name, weightClass.slug);
-      setEloData(data || false); // false means "tried but not found"
-      setIsLoading(false);
-    }
-  };
-  
-  const handleMouseLeave = () => {
-    setShowTooltip(false);
-  };
-  
-  const handleClick = (e) => {
-    if (!name || isPlaceholder || !weightClass?.slug) return;
-    
-    // Open ELO page in new tab
-    e.stopPropagation(); // Prevent match card click
-    window.open(getEloRobotUrl(weightClass.slug, name), '_blank');
-  };
-  
-  // If placeholder or no weight class, render without link
-  if (isPlaceholder || !weightClass?.slug) {
-    return <span className={className}>{name}</span>;
-  }
-  
-  return (
-    <span 
-      className="relative inline-block"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
-      <span 
-        onClick={handleClick}
-        className={`${className} cursor-pointer hover:underline`}
-        title="Click to view ELO stats"
-      >
-        {name}
-        {isWinner && ' ✓'}
-      </span>
-      
-      {/* ELO Tooltip */}
-      {showTooltip && (
-        <div className={`absolute z-50 left-0 top-full mt-1 p-2 rounded-lg shadow-lg border min-w-[180px] ${
-          theme === 'dark' ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'
-        }`}>
-          {isLoading ? (
-            <div className={`text-xs ${t.textMuted}`}>Loading ELO data...</div>
-          ) : eloData ? (
-            <div className="text-xs space-y-1">
-              <div className="flex justify-between items-center gap-3">
-                <span className={t.textMuted}>Rating:</span>
-                <span className={`font-bold ${t.text}`}>{eloData.rating}</span>
-              </div>
-              {eloData.tier && (
-                <div className="flex justify-between items-center gap-3">
-                  <span className={t.textMuted}>Tier:</span>
-                  <span className={`font-semibold px-1.5 py-0.5 rounded text-xs ${
-                    eloData.tier === 'S' ? 'bg-yellow-100 text-yellow-800' :
-                    eloData.tier === 'A' ? 'bg-purple-100 text-purple-800' :
-                    eloData.tier === 'B' ? 'bg-blue-100 text-blue-800' :
-                    eloData.tier === 'C' ? 'bg-green-100 text-green-800' :
-                    'bg-gray-100 text-gray-800'
-                  }`}>{eloData.tier}</span>
-                </div>
-              )}
-              {eloData.rank && (
-                <div className="flex justify-between items-center gap-3">
-                  <span className={t.textMuted}>Rank:</span>
-                  <span className={`font-semibold ${t.text}`}>#{eloData.rank}</span>
-                </div>
-              )}
-              <div className="flex justify-between items-center gap-3">
-                <span className={t.textMuted}>Record:</span>
-                <span className={t.text}>
-                  <span className="text-green-600">{eloData.wins}W</span>
-                  {' - '}
-                  <span className="text-red-600">{eloData.losses}L</span>
-                </span>
-              </div>
-              {eloData.team && (
-                <div className={`pt-1 mt-1 border-t ${t.divider}`}>
-                  <span className={t.textFaint}>{eloData.team}</span>
-                </div>
-              )}
-              <div className={`pt-1 text-blue-500 text-xs`}>
-                Click to view full stats →
-              </div>
-            </div>
-          ) : (
-            <div className={`text-xs ${t.textMuted}`}>
-              Not found in ELO database
-            </div>
-          )}
-        </div>
-      )}
-    </span>
-  );
-};
-
 // Split Point Slider Component - Mobile Optimized
 const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) => {
   const t = themes[theme];
@@ -996,7 +638,7 @@ const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) =>
 };
 
 // Match Card Component - Mobile Optimized
-const MatchCard = ({ match, onClick, showTournament = false, displayStatus, weightClass, theme }) => {
+const MatchCard = ({ match, onClick, showTournament = false, displayStatus, theme }) => {
   const t = themes[theme];
   
   // Use displayStatus if provided, otherwise fall back to basic status check
@@ -1032,11 +674,11 @@ const MatchCard = ({ match, onClick, showTournament = false, displayStatus, weig
     
     switch (status) {
       case 'fighting':
-        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">● NOW FIGHTING</span>;
+        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">â— NOW FIGHTING</span>;
       case 'onDeck':
         return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">On Deck</span>;
       case 'repairing':
-        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">⏱ Repairing</span>;
+        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">â± Repairing</span>;
       default:
         return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.pendingBg} ${t.pendingText}`}>Upcoming</span>;
     }
@@ -1073,17 +715,8 @@ const MatchCard = ({ match, onClick, showTournament = false, displayStatus, weig
                 : match.winner === match.competitorA ? `font-semibold ${t.winnerText}` 
                 : `font-semibold ${t.text}`
             }`}>
-              {compA.isPlaceholder ? (
-                compA.text
-              ) : (
-                <RobotLink
-                  name={compA.text}
-                  weightClass={weightClass}
-                  isWinner={match.winner === match.competitorA}
-                  isPlaceholder={false}
-                  theme={theme}
-                />
-              )}
+              {compA.text}
+              {match.winner === match.competitorA && match.competitorA && ' âœ“'}
             </span>
             {match.status === 'completed' && match.winMethod === 'points' && (
               <span className={`text-sm font-mono ${t.textMuted} flex-shrink-0`}>{match.scores?.a}</span>
@@ -1098,17 +731,8 @@ const MatchCard = ({ match, onClick, showTournament = false, displayStatus, weig
                 : match.winner === match.competitorB ? `font-semibold ${t.winnerText}` 
                 : `font-semibold ${t.text}`
             }`}>
-              {compB.isPlaceholder ? (
-                compB.text
-              ) : (
-                <RobotLink
-                  name={compB.text}
-                  weightClass={weightClass}
-                  isWinner={match.winner === match.competitorB}
-                  isPlaceholder={false}
-                  theme={theme}
-                />
-              )}
+              {compB.text}
+              {match.winner === match.competitorB && match.competitorB && ' âœ“'}
             </span>
             {match.status === 'completed' && match.winMethod === 'points' && (
               <span className={`text-sm font-mono ${t.textMuted} flex-shrink-0`}>{match.scores?.b}</span>
@@ -1212,18 +836,13 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatch
     return (
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-6 sm:p-8 text-center`}>
         <h3 className={`text-lg font-bold ${t.text} mb-2`}>No Tournaments Connected</h3>
-        <p className={t.textMuted}>Go to Admin → Tournaments to add tournament URLs</p>
+        <p className={t.textMuted}>Go to Admin â†’ Tournaments to add tournament URLs</p>
       </div>
     );
   }
 
   const currentTournament = tournaments[selectedTournamentIndex];
   const matches = currentTournament?.matches || [];
-  
-  // Extract weight class from tournament name for ELO lookup
-  const currentWeightClass = currentTournament?.tournament?.name 
-    ? getWeightClassFromTournament(currentTournament.tournament.name)
-    : null;
   
   const winnersMatches = matches.filter(m => m.bracket === 'winners');
   const losersMatches = matches.filter(m => m.bracket === 'losers');
@@ -1282,7 +901,7 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatch
                 </p>
                 <div className="space-y-2 sm:space-y-3 flex-1 flex flex-col justify-around">
                   {roundMatches.map(match => (
-                    <MatchCard key={match.id} match={match} onClick={() => onMatchClick(match)} displayStatus={getMatchDisplayStatus(match)} weightClass={currentWeightClass} theme={theme} />
+                    <MatchCard key={match.id} match={match} onClick={() => onMatchClick(match)} displayStatus={getMatchDisplayStatus(match)} theme={theme} />
                   ))}
                 </div>
               </div>
@@ -1307,7 +926,7 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatch
                   </p>
                   <div className="space-y-2 sm:space-y-3 flex-1 flex flex-col justify-around">
                     {roundMatches.map(match => (
-                      <MatchCard key={match.id} match={match} onClick={() => onMatchClick(match)} displayStatus={getMatchDisplayStatus(match)} weightClass={currentWeightClass} theme={theme} />
+                      <MatchCard key={match.id} match={match} onClick={() => onMatchClick(match)} displayStatus={getMatchDisplayStatus(match)} theme={theme} />
                     ))}
                   </div>
                 </div>
@@ -1519,7 +1138,6 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
             const statusB = getRepairStatus(match.competitorB);
             const bothReady = statusA.ready && statusB.ready;
             const fighting = isNowFighting(match);
-            const weightClass = getWeightClassFromTournament(match.tournamentName);
             
             return (
               <div 
@@ -1537,7 +1155,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                   </div>
                   {fighting ? (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-amber-100 text-amber-700">
-                      ● NOW FIGHTING
+                      â— NOW FIGHTING
                     </span>
                   ) : bothReady ? (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-700">
@@ -1545,7 +1163,7 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                     </span>
                   ) : (
                     <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">
-                      ⏱ Repairing
+                      â± Repairing
                     </span>
                   )}
                 </div>
@@ -1570,14 +1188,12 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                       )}
                     </div>
                     <div>
-                      <p className={`font-semibold ${t.text}`}>
-                        <RobotLink name={match.competitorA} weightClass={weightClass} theme={theme} />
-                      </p>
+                      <p className={`font-semibold ${t.text}`}>{match.competitorA}</p>
                       {!statusA.ready && (
                         <p className="text-red-500 font-mono text-sm">{formatCountdown(statusA.remaining)}</p>
                       )}
                       {statusA.ready && robotLastFight[match.competitorA] && (
-                        <p className="text-green-500 text-xs">✓ Ready</p>
+                        <p className="text-green-500 text-xs">âœ“ Ready</p>
                       )}
                       {!robotLastFight[match.competitorA] && (
                         <p className={`text-xs ${t.textFaint}`}>No recent fight</p>
@@ -1588,14 +1204,12 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
                   {/* Competitor B */}
                   <div className="flex items-center gap-3 justify-end text-right">
                     <div>
-                      <p className={`font-semibold ${t.text}`}>
-                        <RobotLink name={match.competitorB} weightClass={weightClass} theme={theme} />
-                      </p>
+                      <p className={`font-semibold ${t.text}`}>{match.competitorB}</p>
                       {!statusB.ready && (
                         <p className="text-red-500 font-mono text-sm">{formatCountdown(statusB.remaining)}</p>
                       )}
                       {statusB.ready && robotLastFight[match.competitorB] && (
-                        <p className="text-green-500 text-xs">✓ Ready</p>
+                        <p className="text-green-500 text-xs">âœ“ Ready</p>
                       )}
                       {!robotLastFight[match.competitorB] && (
                         <p className={`text-xs ${t.textFaint}`}>No recent fight</p>
@@ -1715,9 +1329,7 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
         </div>
         
         <div className="divide-y divide-gray-200 dark:divide-gray-700">
-          {sortedMatches.map(match => {
-            const weightClass = getWeightClassFromTournament(match.tournamentName);
-            return (
+          {sortedMatches.map(match => (
             <div 
               key={`${match.tournamentId}-${match.id}`}
               onClick={() => onMatchClick(match)}
@@ -1730,31 +1342,26 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
                     <span className={`text-xs ${t.textFaint} block truncate`}>{match.tournamentName.split(' ')[0]}</span>
                   </div>
                   
-                  {/* Robot images */}
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <RobotAvatar name={match.competitorA} robotImages={robotImages} size="md" colorClass="bg-blue-100 text-blue-600" />
-                    <RobotAvatar name={match.competitorB} robotImages={robotImages} size="md" colorClass="bg-red-100 text-red-600" />
-                  </div>
-                  
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`font-semibold ${match.winner === match.competitorA ? t.winnerText : t.text} text-sm truncate`}>
-                        <RobotLink 
-                          name={match.competitorA} 
-                          weightClass={weightClass} 
-                          isWinner={match.winner === match.competitorA}
-                          theme={theme} 
-                        />
+                  {/* Robot cards with names above avatars */}
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {/* Competitor A */}
+                    <div className="flex flex-col items-center flex-shrink-0">
+                      <span className={`font-semibold ${match.winner === match.competitorA ? t.winnerText : t.text} text-xs sm:text-sm mb-1 text-center max-w-[80px] truncate`}>
+                        {match.competitorA}
+                        {match.winner === match.competitorA && ' ✓'}
                       </span>
-                      <span className={`text-xs ${t.textFaint}`}>vs</span>
-                      <span className={`font-semibold ${match.winner === match.competitorB ? t.winnerText : t.text} text-sm truncate`}>
-                        <RobotLink 
-                          name={match.competitorB} 
-                          weightClass={weightClass} 
-                          isWinner={match.winner === match.competitorB}
-                          theme={theme} 
-                        />
+                      <RobotAvatar name={match.competitorA} robotImages={robotImages} size="md" colorClass="bg-blue-100 text-blue-600" />
+                    </div>
+                    
+                    <span className={`text-xs ${t.textFaint} self-center flex-shrink-0`}>vs</span>
+                    
+                    {/* Competitor B */}
+                    <div className="flex flex-col items-center flex-shrink-0">
+                      <span className={`font-semibold ${match.winner === match.competitorB ? t.winnerText : t.text} text-xs sm:text-sm mb-1 text-center max-w-[80px] truncate`}>
+                        {match.competitorB}
+                        {match.winner === match.competitorB && ' ✓'}
                       </span>
+                      <RobotAvatar name={match.competitorB} robotImages={robotImages} size="md" colorClass="bg-red-100 text-red-600" />
                     </div>
                   </div>
                 </div>
@@ -1784,8 +1391,7 @@ const CompletedMatchesView = ({ tournaments, onMatchClick, robotImages, theme })
                 </p>
               )}
             </div>
-            );
-          })}
+          ))}
         </div>
       </div>
     </div>
@@ -2031,9 +1637,9 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
 
   // Get status indicator for dropdown
   const getMatchIndicator = (match) => {
-    if (isMatchFighting(match)) return '🟡'; // Yellow for NOW FIGHTING
-    if (isMatchReady(match)) return '🟢'; // Green if both robots ready
-    return '🔴'; // Red if either robot still repairing
+    if (isMatchFighting(match)) return 'ðŸŸ¡'; // Yellow for NOW FIGHTING
+    if (isMatchReady(match)) return 'ðŸŸ¢'; // Green if both robots ready
+    return 'ðŸ”´'; // Red if either robot still repairing
   };
 
   return (
@@ -2067,7 +1673,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
 
       {submitResult?.finalized && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-          <p className="text-green-700 font-semibold">🏆 Match Complete!</p>
+          <p className="text-green-700 font-semibold">ðŸ† Match Complete!</p>
           <p className={`text-sm ${t.textMuted} mt-1`}>
             Winner: {submitResult.result.winMethod === 'ko' ? 'KO' : `${submitResult.result.scoreA}-${submitResult.result.scoreB}`}
           </p>
@@ -2105,7 +1711,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
                     }`}
                     title={`Judge ${num}${hasJudgeSubmitted ? ' (submitted)' : isCurrentJudge ? ' (you)' : ''}`}
                   >
-                    {hasJudgeSubmitted ? '✓' : num}
+                    {hasJudgeSubmitted ? 'âœ“' : num}
                   </div>
                 );
               })}
@@ -2192,7 +1798,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
               </div>
             </div>
             <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorA || 'TBD'}</p>
-            <p className={`text-xl sm:text-2xl font-bold ${t.blueText} mt-1`}>{isKO ? '—' : totalA}</p>
+            <p className={`text-xl sm:text-2xl font-bold ${t.blueText} mt-1`}>{isKO ? 'â€”' : totalA}</p>
           </div>
           <div className="text-center">
             <span className={`${t.textFaint} font-medium text-sm`}>vs</span>
@@ -2215,7 +1821,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
               </div>
             </div>
             <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorB || 'TBD'}</p>
-            <p className={`text-xl sm:text-2xl font-bold ${t.redText} mt-1`}>{isKO ? '—' : totalB}</p>
+            <p className={`text-xl sm:text-2xl font-bold ${t.redText} mt-1`}>{isKO ? 'â€”' : totalB}</p>
           </div>
         </div>
       </div>
@@ -2285,7 +1891,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
         hasSubmitted ? (
           <div className="space-y-3">
             <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-              <p className="text-green-700 font-semibold">✓ Scores Submitted</p>
+              <p className="text-green-700 font-semibold">âœ“ Scores Submitted</p>
               <p className={`text-sm ${t.textFaint} mt-1`}>
                 Waiting for {3 - (submitResult?.judgeCount || 1)} more judge(s)...
               </p>
@@ -2307,7 +1913,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
 };
 
 // Admin Dashboard View
-const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, scoringCriteria, robotImages, discordWebhookUrl, onEventIdChange, onEventNameChange, onAddTournament, onRemoveTournament, onRefreshAll, onSaveToServer, onCopyLink, onScoringCriteriaChange, onRobotImagesChange, onDiscordWebhookUrlChange, theme }) => {
+const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, scoringCriteria, robotImages, onEventIdChange, onEventNameChange, onAddTournament, onRemoveTournament, onRefreshAll, onSaveToServer, onCopyLink, onScoringCriteriaChange, onRobotImagesChange, theme }) => {
   const t = themes[theme];
   const [selectedTab, setSelectedTab] = useState('settings');
   const [newTournamentUrl, setNewTournamentUrl] = useState('');
@@ -2318,15 +1924,13 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
   const [localEventName, setLocalEventName] = useState(eventName);
   const [localCriteria, setLocalCriteria] = useState(scoringCriteria);
   const [localRobotImages, setLocalRobotImages] = useState(robotImages || {});
-  const [localDiscordWebhookUrl, setLocalDiscordWebhookUrl] = useState(discordWebhookUrl || '');
   
   useEffect(() => {
     setLocalEventId(eventId);
     setLocalEventName(eventName);
     setLocalCriteria(scoringCriteria);
     setLocalRobotImages(robotImages || {});
-    setLocalDiscordWebhookUrl(discordWebhookUrl || '');
-  }, [eventId, eventName, scoringCriteria, robotImages, discordWebhookUrl]);
+  }, [eventId, eventName, scoringCriteria, robotImages]);
 
   const updateCriterion = (index, field, value) => {
     const updated = [...localCriteria];
@@ -2432,37 +2036,10 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
       onEventIdChange(localEventId.trim());
       onEventNameChange(localEventName.trim());
       onScoringCriteriaChange(localCriteria);
-      onDiscordWebhookUrlChange(localDiscordWebhookUrl.trim());
-      await onSaveToServer(localEventId.trim(), localEventName.trim(), localDiscordWebhookUrl.trim());
+      await onSaveToServer(localEventId.trim(), localEventName.trim());
       setSyncStatus({ success: true, message: 'Event saved! Share the link with judges.' });
     } catch (err) {
       setSyncStatus({ success: false, message: err.message });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleTestDiscord = async () => {
-    if (!localEventId.trim()) {
-      setSyncStatus({ success: false, message: 'Save the event first before testing Discord' });
-      return;
-    }
-    if (!localDiscordWebhookUrl.trim()) {
-      setSyncStatus({ success: false, message: 'Enter a Discord webhook URL first' });
-      return;
-    }
-    
-    setIsLoading(true);
-    setSyncStatus(null);
-    
-    try {
-      // First save the event to ensure webhook URL is stored
-      await onSaveToServer(localEventId.trim(), localEventName.trim(), localDiscordWebhookUrl.trim());
-      // Then test the webhook
-      await api.testDiscordWebhook(localEventId.trim());
-      setSyncStatus({ success: true, message: '✓ Test message sent to Discord!' });
-    } catch (err) {
-      setSyncStatus({ success: false, message: `Discord test failed: ${err.message}` });
     } finally {
       setIsLoading(false);
     }
@@ -2478,12 +2055,12 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
   return (
     <div className="space-y-4">
       <div className={`${t.card} rounded-xl border ${t.cardBorder} p-1 inline-flex gap-1 flex-wrap`}>
-        {['settings', 'tournaments', 'images', 'discord', 'share'].map(tab => (
+        {['settings', 'tournaments', 'images', 'share'].map(tab => (
           <button key={tab} onClick={() => setSelectedTab(tab)}
             className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold capitalize transition-colors ${
               selectedTab === tab ? 'bg-gray-900 text-white' : `${t.textMuted} hover:${t.text}`
             }`}>
-            {tab === 'images' ? 'Robot Images' : tab === 'discord' ? '🔔 Discord' : tab}
+            {tab === 'images' ? 'Robot Images' : tab}
           </button>
         ))}
       </div>
@@ -2593,7 +2170,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                 disabled={isLoading}
                 className={`px-3 py-1.5 text-sm font-semibold ${t.textMuted} ${t.hoverBg} rounded-lg transition-colors disabled:opacity-50`}
               >
-                {isLoading ? 'Refreshing...' : '↻ Refresh All'}
+                {isLoading ? 'Refreshing...' : 'â†» Refresh All'}
               </button>
             )}
           </div>
@@ -2634,7 +2211,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                       <p className={`text-xs ${t.textFaint}`}>{url}</p>
                       {tourneyData && (
                         <p className={`text-xs ${t.textMuted} mt-1`}>
-                          Status: {tourneyData.tournament.status} • {tourneyData.matches?.length || 0} matches
+                          Status: {tourneyData.tournament.status} â€¢ {tourneyData.matches?.length || 0} matches
                         </p>
                       )}
                     </div>
@@ -2686,7 +2263,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                 disabled={isLoading || !newRceUrl.trim()}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
               >
-                {isLoading ? 'Loading...' : '📷 Import'}
+                {isLoading ? 'Loading...' : 'ðŸ“· Import'}
               </button>
             </div>
             <p className={`text-xs ${t.textFaint} mt-1`}>
@@ -2739,88 +2316,6 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
           </p>
         </div>
       )}
-
-      {selectedTab === 'discord' && (
-        <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5 space-y-5`}>
-          <h3 className={`font-bold ${t.text}`}>Discord Integration</h3>
-          
-          <div className={`${t.tableBg} rounded-lg p-4`}>
-            <p className={`text-sm ${t.textMuted}`}>
-              Get real-time match results posted to your Discord server! When a match is finalized by all 3 judges, a notification will be automatically sent.
-            </p>
-          </div>
-
-          <div>
-            <label className={`block text-sm font-medium ${t.textMuted} mb-1`}>Discord Webhook URL</label>
-            <input 
-              type="text" 
-              value={localDiscordWebhookUrl}
-              onChange={(e) => setLocalDiscordWebhookUrl(e.target.value)}
-              placeholder="https://discord.com/api/webhooks/..."
-              className={`w-full px-3 py-2 rounded-lg border ${t.inputBorder} ${t.inputBg} ${t.text} focus:ring-2 focus:ring-blue-500 focus:border-blue-500`} 
-            />
-            <p className={`text-xs ${t.textFaint} mt-1`}>
-              Create a webhook in your Discord server: Server Settings → Integrations → Webhooks → New Webhook
-            </p>
-          </div>
-
-          <div className="flex gap-3">
-            <button 
-              onClick={handleTestDiscord}
-              disabled={isLoading || !localDiscordWebhookUrl.trim() || !localEventId.trim()}
-              className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Testing...' : '🧪 Test Webhook'}
-            </button>
-            <button 
-              onClick={handleSaveEvent}
-              disabled={isLoading || !localEventId.trim()}
-              className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? 'Saving...' : '💾 Save Settings'}
-            </button>
-          </div>
-
-          <div className={`pt-4 border-t ${t.divider}`}>
-            <p className={`text-sm font-medium ${t.textMuted} mb-2`}>How it works</p>
-            <div className="space-y-2">
-              <div className={`${t.tableBg} rounded-lg p-3 flex items-start gap-3`}>
-                <span className="text-lg">1️⃣</span>
-                <div>
-                  <p className={`text-sm ${t.text}`}>Create a webhook in Discord</p>
-                  <p className={`text-xs ${t.textFaint}`}>Server Settings → Integrations → Webhooks</p>
-                </div>
-              </div>
-              <div className={`${t.tableBg} rounded-lg p-3 flex items-start gap-3`}>
-                <span className="text-lg">2️⃣</span>
-                <div>
-                  <p className={`text-sm ${t.text}`}>Paste the webhook URL above</p>
-                  <p className={`text-xs ${t.textFaint}`}>Then click "Test Webhook" to verify</p>
-                </div>
-              </div>
-              <div className={`${t.tableBg} rounded-lg p-3 flex items-start gap-3`}>
-                <span className="text-lg">3️⃣</span>
-                <div>
-                  <p className={`text-sm ${t.text}`}>Match results posted automatically</p>
-                  <p className={`text-xs ${t.textFaint}`}>Winner, loser, score, and KO/Decision status</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {localDiscordWebhookUrl && (
-            <div className={`${t.tableBg} rounded-lg p-3`}>
-              <div className="flex items-center gap-2">
-                <span className="text-green-500">✓</span>
-                <span className={`text-sm ${t.text}`}>Webhook configured</span>
-              </div>
-              <p className={`text-xs ${t.textFaint} mt-1`}>
-                Match results will be posted to Discord when finalized
-              </p>
-            </div>
-          )}
-        </div>
-      )}
       
       {selectedTab === 'share' && (
         <div className={`${t.card} rounded-xl border ${t.cardBorder} p-5 space-y-5`}>
@@ -2837,14 +2332,14 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
             disabled={isLoading || !localEventId.trim() || tournamentUrls.length === 0}
             className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'Saving...' : '💾 Save Event to Server'}
+            {isLoading ? 'Saving...' : 'ðŸ’¾ Save Event to Server'}
           </button>
 
           {localEventId && (
             <>
               {/* Judge Link */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textMuted}`}>🎯 Judge Link</label>
+                <label className={`block text-sm font-medium ${t.textMuted}`}>ðŸŽ¯ Judge Link</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -2856,7 +2351,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     onClick={handleCopyLink}
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    📋 Copy
+                    ðŸ“‹ Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
@@ -2866,7 +2361,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
 
               {/* Spectator Link - Subdomain */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textMuted}`}>👀 Spectator Link (Recommended)</label>
+                <label className={`block text-sm font-medium ${t.textMuted}`}>ðŸ‘€ Spectator Link (Recommended)</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -2881,7 +2376,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     }}
                     className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    📋 Copy
+                    ðŸ“‹ Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
@@ -2891,7 +2386,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
 
               {/* Legacy Spectator Link */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textFaint}`}>👀 Spectator Link (Legacy)</label>
+                <label className={`block text-sm font-medium ${t.textFaint}`}>ðŸ‘€ Spectator Link (Legacy)</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -2906,7 +2401,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     }}
                     className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    📋 Copy
+                    ðŸ“‹ Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
@@ -2948,17 +2443,14 @@ export default function TournamentJudgingApp() {
   const [tournaments, setTournaments] = useState([]);
   const [scoringCriteria, setScoringCriteria] = useState(DEFAULT_SCORING_CRITERIA);
   const [robotImages, setRobotImages] = useState({});
-  const [discordWebhookUrl, setDiscordWebhookUrl] = useState('');
   const [activeMatches, setActiveMatches] = useState({});
   const [repairResets, setRepairResets] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [eventLoaded, setEventLoaded] = useState(false);
   
-  // Check if viewing via shared link (hides admin by default)
-  // But allow admin access with ?admin=true parameter
-  const hasAdminOverride = getUrlParam('admin') === 'true';
-  const isSharedView = Boolean(getUrlParam('event')) && !hasAdminOverride;
+  // Check if viewing via shared link (hides admin)
+  const isSharedView = Boolean(getUrlParam('event'));
   
   // Check if spectator mode - either by URL param OR by hostname
   // brackets.socalattackrobots.com = always spectator mode
@@ -3012,7 +2504,6 @@ export default function TournamentJudgingApp() {
             setTournamentUrls(eventData.tournaments || []);
             setScoringCriteria(eventData.scoringCriteria || DEFAULT_SCORING_CRITERIA);
             setRobotImages(eventData.robotImages || {});
-            setDiscordWebhookUrl(eventData.discordWebhookUrl || '');
             setEventLoaded(true);
           }
         } catch (err) {
@@ -3079,8 +2570,8 @@ export default function TournamentJudgingApp() {
     setTournaments(prev => prev.filter(t => t.tournament.url !== url));
   };
 
-  const saveToServer = async (id, name, webhookUrl) => {
-    await api.saveEvent(id, name, tournamentUrls, scoringCriteria, robotImages, webhookUrl || discordWebhookUrl);
+  const saveToServer = async (id, name) => {
+    await api.saveEvent(id, name, tournamentUrls, scoringCriteria, robotImages);
     setUrlParam('event', id);
   };
 
@@ -3418,7 +2909,6 @@ export default function TournamentJudgingApp() {
             tournaments={tournaments}
             scoringCriteria={scoringCriteria}
             robotImages={robotImages}
-            discordWebhookUrl={discordWebhookUrl}
             onEventIdChange={setEventId}
             onEventNameChange={setEventName}
             onAddTournament={addTournament}
@@ -3428,7 +2918,6 @@ export default function TournamentJudgingApp() {
             onCopyLink={copyLink}
             onScoringCriteriaChange={setScoringCriteria}
             onRobotImagesChange={setRobotImages}
-            onDiscordWebhookUrlChange={setDiscordWebhookUrl}
             theme={theme} 
           />
         )}
@@ -3442,7 +2931,7 @@ export default function TournamentJudgingApp() {
               <div>Built for <a href="https://www.socalattackrobots.com/" className={t.blueText}>SCAR</a></div>
               <div className="flex items-center gap-2 sm:gap-4">
                 <span>{tournaments.length} tournament{tournaments.length !== 1 ? 's' : ''}</span>
-                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline">â€¢</span>
                 <span className="hidden sm:inline">Shareable via URL</span>
               </div>
             </div>
