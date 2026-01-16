@@ -1031,23 +1031,23 @@ const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) =>
         <div className="flex-1 relative py-3">
           {/* Track background */}
           <div className={`h-2 ${t.sliderBg} rounded-full relative overflow-hidden`}>
-            {/* Blue fill from left (for competitor A) */}
+            {/* Red fill from left - as we move right, red grows (giving B more points) */}
             <div 
-              className="absolute left-0 top-0 h-full bg-blue-500 rounded-l-full transition-all duration-150"
-              style={{ width: `${(valueA / maxPoints) * 100}%` }}
-            />
-            {/* Red fill from right (for competitor B) */}
-            <div 
-              className="absolute right-0 top-0 h-full bg-red-500 rounded-r-full transition-all duration-150"
+              className="absolute left-0 top-0 h-full bg-red-500 rounded-l-full transition-all duration-150"
               style={{ width: `${(valueB / maxPoints) * 100}%` }}
+            />
+            {/* Blue fill from right - as we move left, blue grows (giving A more points) */}
+            <div 
+              className="absolute right-0 top-0 h-full bg-blue-500 rounded-r-full transition-all duration-150"
+              style={{ width: `${(valueA / maxPoints) * 100}%` }}
             />
           </div>
           
-          {/* Circular thumb - positioned based on valueA */}
+          {/* Circular thumb - positioned naturally with the input */}
           <div 
             className="absolute pointer-events-none transition-all duration-150"
             style={{ 
-              left: `${(valueA / maxPoints) * 100}%`,
+              left: `${(valueB / maxPoints) * 100}%`,
               top: '50%',
               marginTop: '-0.5rem',
               marginLeft: '-0.75rem'
@@ -1058,12 +1058,12 @@ const SplitSlider = ({ label, maxPoints, valueA, onChange, disabled, theme }) =>
             }`} />
           </div>
           
-          {/* Range input - reversed so sliding right increases valueB */}
+          {/* Range input - straightforward, no inversion */}
           <input
             type="range" 
             min={0} 
             max={maxPoints} 
-            value={maxPoints - valueA}
+            value={valueB}
             onChange={(e) => handleChange(maxPoints - parseInt(e.target.value))}
             disabled={disabled}
             className="absolute w-full opacity-0 cursor-pointer disabled:cursor-not-allowed z-10"
