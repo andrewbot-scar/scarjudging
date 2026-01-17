@@ -737,9 +737,6 @@ app.get('/api/events/:eventId/repair-resets', async (req, res) => {
 // MATCH QUEUE MANAGEMENT ENDPOINTS
 // ============================================
 
-// In-memory fallback for repair timer resets (defined earlier, but included here for context)
-const memoryRepairResets = {};
-
 // GET /api/events/:eventId/match-queue - Get current match queue order
 app.get('/api/events/:eventId/match-queue', async (req, res) => {
   try {
