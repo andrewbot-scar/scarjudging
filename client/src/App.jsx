@@ -1162,7 +1162,7 @@ const MatchCard = ({ match, onClick, showTournament = false, displayStatus, weig
       case 'onDeck':
         return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-green-100 text-green-700">On Deck</span>;
       case 'repairing':
-        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">â± Repairing</span>;
+        return <span className="px-2 py-0.5 text-xs font-semibold rounded bg-red-100 text-red-700">⏱️ Repairing</span>;
       default:
         return <span className={`px-2 py-0.5 text-xs font-semibold rounded ${t.pendingBg} ${t.pendingText}`}>Upcoming</span>;
     }
@@ -2220,7 +2220,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
   const getMatchIndicator = (match) => {
     if (isMatchFighting(match)) return '🟡'; // Yellow for NOW FIGHTING
     if (isMatchReady(match)) return '🟢'; // Green if both robots ready
-    return 'ðŸ”´'; // Red if either robot still repairing
+    return '🔴'; // Red if either robot still repairing
   };
 
   return (
@@ -2254,7 +2254,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
 
       {submitResult?.finalized && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-center">
-          <p className="text-green-700 font-semibold">ðŸ† Match Complete!</p>
+          <p className="text-green-700 font-semibold">🏆 Match Complete!</p>
           <p className={`text-sm ${t.textMuted} mt-1`}>
             Winner: {submitResult.result.winMethod === 'ko' ? 'KO' : `${submitResult.result.scoreA}-${submitResult.result.scoreB}`}
           </p>
@@ -2379,7 +2379,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
               </div>
             </div>
             <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorA || 'TBD'}</p>
-            <p className={`text-xl sm:text-2xl font-bold ${t.blueText} mt-1`}>{isKO ? 'â€”' : totalA}</p>
+            <p className={`text-xl sm:text-2xl font-bold ${t.blueText} mt-1`}>{isKO ? '—' : totalA}</p>
           </div>
           <div className="text-center">
             <span className={`${t.textFaint} font-medium text-sm`}>vs</span>
@@ -2402,7 +2402,7 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
               </div>
             </div>
             <p className={`font-semibold ${t.text} text-xs sm:text-sm truncate px-1`}>{selectedMatch.competitorB || 'TBD'}</p>
-            <p className={`text-xl sm:text-2xl font-bold ${t.redText} mt-1`}>{isKO ? 'â€”' : totalB}</p>
+            <p className={`text-xl sm:text-2xl font-bold ${t.redText} mt-1`}>{isKO ? '—' : totalB}</p>
           </div>
         </div>
       </div>
@@ -3013,7 +3013,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
             className={`px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold capitalize transition-colors ${
               selectedTab === tab ? 'bg-gray-900 text-white' : `${t.textMuted} hover:${t.text}`
             }`}>
-            {tab === 'images' ? 'Robot Images' : tab === 'discord' ? 'ðŸ”” Discord' : tab}
+            {tab === 'images' ? 'Robot Images' : tab === 'discord' ? '🔔 Discord' : tab}
           </button>
         ))}
       </div>
@@ -3216,7 +3216,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                 disabled={isLoading || !newRceUrl.trim()}
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
               >
-                {isLoading ? 'Loading...' : 'ðŸ“· Import'}
+                {isLoading ? 'Loading...' : '📷 Import'}
               </button>
             </div>
             <p className={`text-xs ${t.textFaint} mt-1`}>
@@ -3367,7 +3367,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
             disabled={isLoading || !localEventId.trim() || tournamentUrls.length === 0}
             className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isLoading ? 'Saving...' : 'ðŸ’¾ Save Event to Server'}
+            {isLoading ? 'Saving...' : '💾 Save Event to Server'}
           </button>
 
           {localEventId && (
@@ -3386,7 +3386,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     onClick={handleCopyLink}
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    ðŸ“‹ Copy
+                    📋 Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
@@ -3396,7 +3396,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
 
               {/* Spectator Link - Subdomain */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textMuted}`}>ðŸ‘€ Spectator Link (Recommended)</label>
+                <label className={`block text-sm font-medium ${t.textMuted}`}>👀 Spectator Link (Recommended)</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -3411,7 +3411,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     }}
                     className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    ðŸ“‹ Copy
+                    📋 Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
@@ -3421,7 +3421,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
 
               {/* Legacy Spectator Link */}
               <div className="space-y-2">
-                <label className={`block text-sm font-medium ${t.textFaint}`}>ðŸ‘€ Spectator Link (Legacy)</label>
+                <label className={`block text-sm font-medium ${t.textFaint}`}>👀 Spectator Link (Legacy)</label>
                 <div className="flex gap-2">
                   <input 
                     type="text" 
@@ -3436,7 +3436,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
                     }}
                     className="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors"
                   >
-                    ðŸ“‹ Copy
+                    📋 Copy
                   </button>
                 </div>
                 <p className={`text-xs ${t.textFaint}`}>
