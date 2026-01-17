@@ -183,29 +183,29 @@ async function postMatchToDiscord(webhookUrl, matchData) {
 
   // Create Discord embed
   const embed = {
-    title: `ðŸ¤– Match ${matchNum} Complete!`,
+    title: `🤖 Match ${matchNum} Complete!`,
     description: `**${tournamentName}**`,
     color: winMethod === 'ko' ? 0xFF0000 : 0x00FF00, // Red for KO, Green for decision
     fields: [
       {
-        name: 'ðŸ† Winner',
+        name: '🏆 Winner',
         value: winner || 'Unknown',
         inline: true
       },
       {
-        name: 'ðŸ’€ Defeated',
+        name: '💀 Defeated',
         value: loser || 'Unknown',
         inline: true
       },
       {
-        name: 'ðŸ“Š Result',
+        name: '📊 Result',
         value: winMethod === 'ko' ? '**KNOCKOUT!**' : `${scoreA} - ${scoreB}`,
         inline: true
       }
     ],
     timestamp: new Date().toISOString(),
     footer: {
-      text: eventName ? `${eventName} â€¢ SCAR Judge Portal` : 'SCAR Judge Portal'
+      text: eventName ? `${eventName} • SCAR Judge Portal` : 'SCAR Judge Portal'
     }
   };
 
