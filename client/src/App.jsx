@@ -3777,7 +3777,7 @@ export default function TournamentJudgingApp() {
                   className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                     view === 'queue' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
                   }`}>
-                  Queue
+                  📋 Queue
                 </button>
               )}
               {!isSharedView && !isSpectatorDomain && (
@@ -3817,7 +3817,7 @@ export default function TournamentJudgingApp() {
                   className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     view === 'queue' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
                   }`}>
-                  Queue
+                  📋 Queue
                 </button>
               )}
               {!isSharedView && !isSpectatorDomain && (
