@@ -3307,7 +3307,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
               disabled={isLoading || !localEventId.trim()}
               className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? 'Saving...' : 'ðŸ’¾ Save Settings'}
+              {isLoading ? 'Saving...' : '💾 Save Settings'}
             </button>
           </div>
 
@@ -3315,21 +3315,21 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
             <p className={`text-sm font-medium ${t.textMuted} mb-2`}>How it works</p>
             <div className="space-y-2">
               <div className={`${t.tableBg} rounded-lg p-3 flex items-start gap-3`}>
-                <span className="text-lg">1ï¸âƒ£</span>
+                <span className="text-lg">1️⃣</span>
                 <div>
                   <p className={`text-sm ${t.text}`}>Create a webhook in Discord</p>
                   <p className={`text-xs ${t.textFaint}`}>Server Settings → Integrations → Webhooks</p>
                 </div>
               </div>
               <div className={`${t.tableBg} rounded-lg p-3 flex items-start gap-3`}>
-                <span className="text-lg">2ï¸âƒ£</span>
+                <span className="text-lg">2️⃣</span>
                 <div>
                   <p className={`text-sm ${t.text}`}>Paste the webhook URL above</p>
                   <p className={`text-xs ${t.textFaint}`}>Then click "Test Webhook" to verify</p>
                 </div>
               </div>
               <div className={`${t.tableBg} rounded-lg p-3 flex items-start gap-3`}>
-                <span className="text-lg">3ï¸âƒ£</span>
+                <span className="text-lg">3️⃣</span>
                 <div>
                   <p className={`text-sm ${t.text}`}>Match results posted automatically</p>
                   <p className={`text-xs ${t.textFaint}`}>Winner, loser, score, and KO/Decision status</p>
