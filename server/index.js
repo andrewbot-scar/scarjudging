@@ -3765,22 +3765,20 @@ export default function TournamentJudgingApp() {
                 Completed
               </button>
               {!isSpectatorDomain && (
-                <>
-                  <button onClick={() => handleLogin('judge')}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                      view === 'judge' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
-                    }`}>
-                    Judge
-                  </button>
-                  {currentUser && (currentUser.role === 'judge' || currentUser.role === 'admin') && (
-                    <button onClick={() => setView('queue')}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                        view === 'queue' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
-                      }`}>
-                      Queue
-                    </button>
-                  )}
-                </>
+                <button onClick={() => handleLogin('judge')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    view === 'judge' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  }`}>
+                  Judge
+                </button>
+              )}
+              {!isSpectatorDomain && currentUser && (currentUser.role === 'judge' || currentUser.role === 'admin') && (
+                <button onClick={() => setView('queue')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    view === 'queue' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  }`}>
+                  Queue
+                </button>
               )}
               {!isSharedView && !isSpectatorDomain && (
                 <button onClick={() => handleLogin('admin')}
@@ -3807,22 +3805,20 @@ export default function TournamentJudgingApp() {
                 Completed
               </button>
               {!isSpectatorDomain && (
-                <>
-                  <button onClick={() => handleLogin('judge')}
-                    className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                      view === 'judge' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
-                    }`}>
-                    Judge
-                  </button>
-                  {currentUser && (currentUser.role === 'judge' || currentUser.role === 'admin') && (
-                    <button onClick={() => setView('queue')}
-                      className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                        view === 'queue' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
-                      }`}>
-                      Queue
-                    </button>
-                  )}
-                </>
+                <button onClick={() => handleLogin('judge')}
+                  className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    view === 'judge' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  }`}>
+                  Judge
+                </button>
+              )}
+              {!isSpectatorDomain && currentUser && (currentUser.role === 'judge' || currentUser.role === 'admin') && (
+                <button onClick={() => setView('queue')}
+                  className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    view === 'queue' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  }`}>
+                  Queue
+                </button>
               )}
               {!isSharedView && !isSpectatorDomain && (
                 <button onClick={() => handleLogin('admin')}
