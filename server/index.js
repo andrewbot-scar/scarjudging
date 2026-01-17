@@ -102,6 +102,19 @@ async function initDatabase() {
       )
     `);
 
+    // Create match_queue table for manual match ordering
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS match_queue (
+        id SERIAL PRIMARY KEY,
+        event_id VARCHAR(255) NOT NULL,
+        tournament_id VARCHAR(255) NOT NULL,
+        match_id VARCHAR(255) NOT NULL,
+        queue_position INTEGER NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(event_id, tournament_id, match_id)
+      )
+    `);
+
     console.log('Database tables initialized successfully');
   } catch (error) {
     console.error('Failed to initialize database:', error);
@@ -170,29 +183,29 @@ async function postMatchToDiscord(webhookUrl, matchData) {
 
   // Create Discord embed
   const embed = {
-    title: `🤖 Match ${matchNum} Complete!`,
+    title: `ðŸ¤– Match ${matchNum} Complete!`,
     description: `**${tournamentName}**`,
     color: winMethod === 'ko' ? 0xFF0000 : 0x00FF00, // Red for KO, Green for decision
     fields: [
       {
-        name: '🏆 Winner',
+        name: 'ðŸ† Winner',
         value: winner || 'Unknown',
         inline: true
       },
       {
-        name: '💀 Defeated',
+        name: 'ðŸ’€ Defeated',
         value: loser || 'Unknown',
         inline: true
       },
       {
-        name: '📊 Result',
+        name: 'ðŸ“Š Result',
         value: winMethod === 'ko' ? '**KNOCKOUT!**' : `${scoreA} - ${scoreB}`,
         inline: true
       }
     ],
     timestamp: new Date().toISOString(),
     footer: {
-      text: eventName ? `${eventName} • SCAR Judge Portal` : 'SCAR Judge Portal'
+      text: eventName ? `${eventName} â€¢ SCAR Judge Portal` : 'SCAR Judge Portal'
     }
   };
 
@@ -532,6 +545,9 @@ app.post('/api/events/:eventId/test-discord', async (req, res) => {
 // In-memory fallback for active matches
 const memoryActiveMatches = {};
 
+// In-memory fallback for match queue
+const memoryMatchQueue = {};
+
 // POST /api/events/:eventId/active-match - Set the currently fighting match for a tournament
 app.post('/api/events/:eventId/active-match', async (req, res) => {
   try {
@@ -713,6 +729,95 @@ app.get('/api/events/:eventId/repair-resets', async (req, res) => {
     }
   } catch (error) {
     console.error('Error getting repair timer resets:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// MATCH QUEUE MANAGEMENT ENDPOINTS
+// ============================================
+
+// In-memory fallback for repair timer resets (defined earlier, but included here for context)
+const memoryRepairResets = {};
+
+// GET /api/events/:eventId/match-queue - Get current match queue order
+app.get('/api/events/:eventId/match-queue', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    if (pool) {
+      const result = await pool.query(
+        'SELECT tournament_id, match_id, queue_position FROM match_queue WHERE event_id = $1 ORDER BY queue_position ASC',
+        [eventId]
+      );
+      
+      // Return as array of match positions
+      const queue = result.rows.map(row => ({
+        tournamentId: row.tournament_id,
+        matchId: row.match_id,
+        position: row.queue_position
+      }));
+      
+      res.json(queue);
+    } else {
+      res.json(memoryMatchQueue[eventId] || []);
+    }
+  } catch (error) {
+    console.error('Error getting match queue:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/events/:eventId/match-queue - Update match queue order
+app.post('/api/events/:eventId/match-queue', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    const { queue } = req.body; // Array of { tournamentId, matchId, position }
+
+    if (!queue || !Array.isArray(queue)) {
+      return res.status(400).json({ error: 'queue must be an array' });
+    }
+
+    if (pool) {
+      // Delete existing queue for this event
+      await pool.query('DELETE FROM match_queue WHERE event_id = $1', [eventId]);
+      
+      // Insert new queue order
+      for (const item of queue) {
+        await pool.query(`
+          INSERT INTO match_queue (event_id, tournament_id, match_id, queue_position, updated_at)
+          VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+        `, [eventId, item.tournamentId, item.matchId, item.position]);
+      }
+      
+      console.log(`Match queue updated for event ${eventId}: ${queue.length} matches`);
+    } else {
+      // Fallback to in-memory
+      memoryMatchQueue[eventId] = queue;
+    }
+
+    res.json({ success: true, queueLength: queue.length });
+  } catch (error) {
+    console.error('Error updating match queue:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE /api/events/:eventId/match-queue - Clear match queue (revert to automatic ordering)
+app.delete('/api/events/:eventId/match-queue', async (req, res) => {
+  try {
+    const { eventId } = req.params;
+
+    if (pool) {
+      await pool.query('DELETE FROM match_queue WHERE event_id = $1', [eventId]);
+      console.log(`Match queue cleared for event ${eventId}`);
+    } else {
+      delete memoryMatchQueue[eventId];
+    }
+
+    res.json({ success: true, message: 'Match queue cleared' });
+  } catch (error) {
+    console.error('Error clearing match queue:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -1244,7 +1349,7 @@ function calculateMatchResult(matchData) {
   // Check if any competitor has 2+ KO votes
   for (const [winnerId, votes] of Object.entries(koVotes)) {
     if (votes >= 2) {
-      // Calculate max possible points (3 judges × total points per judge)
+      // Calculate max possible points (3 judges Ã— total points per judge)
       // Default is 11 points per judge (3+5+3), but could be different with custom criteria
       // For KO, give winner all points from all 3 judges
       const maxPointsPerJudge = 11; // Default total points
