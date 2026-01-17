@@ -3300,7 +3300,7 @@ const AdminDashboardView = ({ eventId, eventName, tournamentUrls, tournaments, s
               disabled={isLoading || !localDiscordWebhookUrl.trim() || !localEventId.trim()}
               className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? 'Testing...' : 'ðŸ§ª Test Webhook'}
+              {isLoading ? 'Testing...' : '🧪 Test Webhook'}
             </button>
             <button 
               onClick={handleSaveEvent}
@@ -3772,7 +3772,7 @@ export default function TournamentJudgingApp() {
                   Judge
                 </button>
               )}
-              {!isSpectatorDomain && currentUser && (currentUser.role === 'judge' || currentUser.role === 'admin') && (
+              {!isSpectatorDomain && currentUser && (
                 <button onClick={() => setView('queue')}
                   className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
                     view === 'queue' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
@@ -3812,7 +3812,7 @@ export default function TournamentJudgingApp() {
                   Judge
                 </button>
               )}
-              {!isSpectatorDomain && currentUser && (currentUser.role === 'judge' || currentUser.role === 'admin') && (
+              {!isSpectatorDomain && currentUser && (
                 <button onClick={() => setView('queue')}
                   className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     view === 'queue' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
