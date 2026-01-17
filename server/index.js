@@ -1,4 +1,4 @@
-// server/index.js
+x// server/index.js
 // Backend server for SCAR Tournament Judge Portal
 // Handles Challonge API integration securely
 
