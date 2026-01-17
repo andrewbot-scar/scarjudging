@@ -2687,7 +2687,7 @@ const MatchQueueManager = ({ tournaments, eventId, robotImages, activeMatches, r
   
   const handleResetQueue = async () => {
     if (!eventId) return;
-    if (!confirm('Reset to automatic ordering?')) return;
+    if (!window.confirm('Reset to automatic ordering?')) return;
     
     setIsLoading(true);
     setSaveStatus(null);
