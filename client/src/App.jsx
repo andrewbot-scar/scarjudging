@@ -293,6 +293,36 @@ const api = {
     if (!response.ok) throw new Error('Failed to clear repair reset');
     return response.json();
   },
+
+  // Match Queue API
+  async getMatchQueue(eventId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/events/${eventId}/match-queue`);
+      if (!response.ok) return []; // Return empty array on error
+      return response.json();
+    } catch (err) {
+      console.error('Failed to fetch match queue:', err);
+      return []; // Return empty array on error
+    }
+  },
+
+  async updateMatchQueue(eventId, queue) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/match-queue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ queue }),
+    });
+    if (!response.ok) throw new Error('Failed to update match queue');
+    return response.json();
+  },
+
+  async clearMatchQueue(eventId) {
+    const response = await fetch(`${API_BASE_URL}/events/${eventId}/match-queue`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) throw new Error('Failed to clear match queue');
+    return response.json();
+  },
 };
 
 // Theme configurations
@@ -1417,16 +1447,35 @@ const PublicBracketView = ({ tournaments, onMatchClick, robotImages, activeMatch
 };
 
 // Upcoming Matches View - Shows next matches with repair countdown timers
-const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairResets, theme }) => {
+const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairResets, eventId, theme }) => {
   const t = themes[theme];
   const [now, setNow] = useState(new Date());
   const [selectedTournament, setSelectedTournament] = useState('all');
+  const [matchQueue, setMatchQueue] = useState([]);
   
   // Update time every second for countdown
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
+  
+  // Load saved match queue
+  useEffect(() => {
+    const loadQueue = async () => {
+      if (!eventId) return;
+      try {
+        const queue = await api.getMatchQueue(eventId);
+        setMatchQueue(queue || []);
+      } catch (err) {
+        console.error('Failed to load match queue:', err);
+      }
+    };
+    
+    loadQueue();
+    // Poll for queue updates every 5 seconds
+    const interval = setInterval(loadQueue, 5000);
+    return () => clearInterval(interval);
+  }, [eventId]);
   
   // Get all completed matches to track when robots last fought
   const allCompletedMatches = tournaments.flatMap(tourney => 
@@ -1509,25 +1558,67 @@ const UpcomingMatchesView = ({ tournaments, robotImages, activeMatches, repairRe
     return statusA.ready && statusB.ready;
   };
 
-  // Sort: NOW FIGHTING first, then On Deck (both ready), then by match number
-  const sortedUpcoming = [...filteredMatches]
-    .sort((a, b) => {
-      // NOW FIGHTING matches go first
-      const aFighting = isNowFighting(a);
-      const bFighting = isNowFighting(b);
-      if (aFighting && !bFighting) return -1;
-      if (bFighting && !aFighting) return 1;
+  // Sort: Use manual queue if available, otherwise automatic sorting
+  const sortedUpcoming = (() => {
+    // If we have a manual queue, use that for ordering
+    if (matchQueue && matchQueue.length > 0) {
+      const queueMap = new Map();
+      matchQueue.forEach((item, index) => {
+        queueMap.set(`${item.tournamentId}-${item.matchId}`, item.position);
+      });
       
-      // On Deck (both robots ready) goes next
-      const aReady = isBothReady(a);
-      const bReady = isBothReady(b);
-      if (aReady && !bReady) return -1;
-      if (bReady && !aReady) return 1;
-      
-      // Then sort by match number
-      return a.matchNum - b.matchNum;
-    })
-    .slice(0, 10);
+      return [...filteredMatches]
+        .sort((a, b) => {
+          // NOW FIGHTING always goes first
+          const aFighting = isNowFighting(a);
+          const bFighting = isNowFighting(b);
+          if (aFighting && !bFighting) return -1;
+          if (bFighting && !aFighting) return 1;
+          
+          // Then use manual queue position
+          const aKey = `${a.tournamentUrl}-${a.challongeId}`;
+          const bKey = `${b.tournamentUrl}-${b.challongeId}`;
+          const aPos = queueMap.get(aKey);
+          const bPos = queueMap.get(bKey);
+          
+          // If both in queue, sort by queue position
+          if (aPos !== undefined && bPos !== undefined) {
+            return aPos - bPos;
+          }
+          // Queue items come before non-queue items
+          if (aPos !== undefined) return -1;
+          if (bPos !== undefined) return 1;
+          
+          // For non-queued items, use automatic ordering
+          const aReady = isBothReady(a);
+          const bReady = isBothReady(b);
+          if (aReady && !bReady) return -1;
+          if (bReady && !aReady) return 1;
+          return a.matchNum - b.matchNum;
+        })
+        .slice(0, 10);
+    }
+    
+    // Automatic sorting (original logic)
+    return [...filteredMatches]
+      .sort((a, b) => {
+        // NOW FIGHTING matches go first
+        const aFighting = isNowFighting(a);
+        const bFighting = isNowFighting(b);
+        if (aFighting && !bFighting) return -1;
+        if (bFighting && !aFighting) return 1;
+        
+        // On Deck (both robots ready) goes next
+        const aReady = isBothReady(a);
+        const bReady = isBothReady(b);
+        if (aReady && !bReady) return -1;
+        if (bReady && !aReady) return 1;
+        
+        // Then sort by match number
+        return a.matchNum - b.matchNum;
+      })
+      .slice(0, 10);
+  })();
   
   const formatCountdown = (ms) => {
     if (ms <= 0) return 'Ready';
@@ -2398,6 +2489,349 @@ const JudgeScoringView = ({ tournaments, currentUser, onScoreSubmitted, onStartM
           </button>
         )
       )}
+    </div>
+  );
+};
+
+// Match Queue Manager Component - For Admin/Judge to manually order upcoming matches
+const MatchQueueManager = ({ tournaments, eventId, robotImages, activeMatches, repairResets, theme }) => {
+  const t = themes[theme];
+  const [now, setNow] = useState(new Date());
+  const [queue, setQueue] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [saveStatus, setSaveStatus] = useState(null);
+  const [draggedIndex, setDraggedIndex] = useState(null);
+  
+  // Update time every second for repair status
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+  
+  // Get all completed matches to track when robots last fought
+  const allCompletedMatches = tournaments.flatMap(tourney => 
+    (tourney.matches || []).filter(m => m.status === 'completed')
+  );
+  
+  // Build a map of robot name -> last fight end time
+  const robotLastFight = {};
+  allCompletedMatches.forEach(match => {
+    if (match.completedAt) {
+      const time = new Date(match.completedAt).getTime();
+      if (match.competitorA) {
+        if (!robotLastFight[match.competitorA] || time > robotLastFight[match.competitorA]) {
+          robotLastFight[match.competitorA] = time;
+        }
+      }
+      if (match.competitorB) {
+        if (!robotLastFight[match.competitorB] || time > robotLastFight[match.competitorB]) {
+          robotLastFight[match.competitorB] = time;
+        }
+      }
+    }
+  });
+  
+  const REPAIR_TIME_MS = 20 * 60 * 1000;
+  
+  const getRepairStatus = (robotName) => {
+    let resetTime = null;
+    if (repairResets) {
+      for (const [key, value] of Object.entries(repairResets)) {
+        if (key.toLowerCase() === robotName?.toLowerCase()) {
+          resetTime = new Date(value).getTime();
+          break;
+        }
+      }
+    }
+    
+    const lastFight = robotLastFight[robotName];
+    const effectiveStart = Math.max(lastFight || 0, resetTime || 0);
+    
+    if (!effectiveStart) return { ready: true, remaining: 0 };
+    
+    const elapsed = now.getTime() - effectiveStart;
+    const remaining = REPAIR_TIME_MS - elapsed;
+    
+    return {
+      ready: remaining <= 0,
+      remaining: Math.max(0, remaining)
+    };
+  };
+  
+  const isMatchFighting = (match) => {
+    const activeMatch = activeMatches?.[match.tournamentUrl];
+    return activeMatch?.matchId === String(match.challongeId);
+  };
+  
+  // Get ready matches (both robots ready, not fighting)
+  const getReadyMatches = () => {
+    return tournaments.flatMap(tourney => 
+      (tourney.matches || []).filter(m => 
+        (m.status === 'pending' || m.status === 'active') && 
+        m.competitorA && 
+        m.competitorB &&
+        !isMatchFighting(m)
+      )
+    ).filter(m => {
+      const statusA = getRepairStatus(m.competitorA);
+      const statusB = getRepairStatus(m.competitorB);
+      return statusA.ready && statusB.ready;
+    });
+  };
+  
+  // Load saved queue on mount
+  useEffect(() => {
+    const loadQueue = async () => {
+      if (!eventId) return;
+      setIsLoading(true);
+      try {
+        const savedQueue = await api.getMatchQueue(eventId);
+        if (savedQueue && savedQueue.length > 0) {
+          setQueue(savedQueue);
+        } else {
+          // Initialize with ready matches in default order
+          const readyMatches = getReadyMatches();
+          const initialQueue = readyMatches.map((m, idx) => ({
+            tournamentId: m.tournamentUrl,
+            matchId: String(m.challongeId),
+            position: idx,
+            match: m
+          }));
+          setQueue(initialQueue);
+        }
+      } catch (err) {
+        console.error('Failed to load queue:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    loadQueue();
+  }, [eventId]);
+  
+  // Update queue when matches change
+  useEffect(() => {
+    const readyMatches = getReadyMatches();
+    
+    // Add new ready matches that aren't in queue yet
+    const queueMatchIds = new Set(queue.map(q => q.matchId));
+    const newMatches = readyMatches.filter(m => !queueMatchIds.has(String(m.challongeId)));
+    
+    if (newMatches.length > 0) {
+      const newQueue = [
+        ...queue,
+        ...newMatches.map((m, idx) => ({
+          tournamentId: m.tournamentUrl,
+          matchId: String(m.challongeId),
+          position: queue.length + idx,
+          match: m
+        }))
+      ];
+      setQueue(newQueue);
+    }
+    
+    // Remove matches that are no longer ready or are now fighting
+    const updatedQueue = queue.filter(q => {
+      const match = readyMatches.find(m => String(m.challongeId) === q.matchId);
+      return match && !isMatchFighting(match);
+    }).map((q, idx) => ({ ...q, position: idx }));
+    
+    if (updatedQueue.length !== queue.length) {
+      setQueue(updatedQueue);
+    }
+  }, [tournaments, activeMatches, repairResets, now]);
+  
+  // Drag and drop handlers
+  const handleDragStart = (e, index) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+    
+    const newQueue = [...queue];
+    const draggedItem = newQueue[draggedIndex];
+    newQueue.splice(draggedIndex, 1);
+    newQueue.splice(index, 0, draggedItem);
+    
+    // Update positions
+    newQueue.forEach((item, idx) => {
+      item.position = idx;
+    });
+    
+    setQueue(newQueue);
+    setDraggedIndex(index);
+  };
+  
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+  
+  const handleSaveQueue = async () => {
+    if (!eventId) return;
+    setIsLoading(true);
+    setSaveStatus(null);
+    
+    try {
+      await api.updateMatchQueue(eventId, queue);
+      setSaveStatus({ success: true, message: 'Queue order saved!' });
+      setTimeout(() => setSaveStatus(null), 3000);
+    } catch (err) {
+      setSaveStatus({ success: false, message: err.message });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleResetQueue = async () => {
+    if (!eventId) return;
+    if (!confirm('Reset to automatic ordering?')) return;
+    
+    setIsLoading(true);
+    setSaveStatus(null);
+    
+    try {
+      await api.clearMatchQueue(eventId);
+      // Reinitialize with default order
+      const readyMatches = getReadyMatches();
+      const newQueue = readyMatches.map((m, idx) => ({
+        tournamentId: m.tournamentUrl,
+        matchId: String(m.challongeId),
+        position: idx,
+        match: m
+      }));
+      setQueue(newQueue);
+      setSaveStatus({ success: true, message: 'Reset to automatic ordering' });
+      setTimeout(() => setSaveStatus(null), 3000);
+    } catch (err) {
+      setSaveStatus({ success: false, message: err.message });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Find match details for each queue item
+  const queueWithMatches = queue.map(q => {
+    const match = tournaments.flatMap(t => t.matches || []).find(m => String(m.challongeId) === q.matchId);
+    return { ...q, match };
+  }).filter(q => q.match); // Filter out matches that no longer exist
+  
+  if (queueWithMatches.length === 0) {
+    return (
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-6 sm:p-8 text-center`}>
+        <div className={`w-16 h-16 mx-auto rounded-full ${t.tableBg} flex items-center justify-center mb-4`}>
+          <svg className={`w-8 h-8 ${t.textFaint}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+          </svg>
+        </div>
+        <h3 className={`text-lg font-bold ${t.text} mb-2`}>No Matches Ready</h3>
+        <p className={t.textMuted}>Matches will appear here when both robots are ready to fight.</p>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} p-4`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className={`text-lg font-bold ${t.text}`}>Match Queue Manager</h2>
+            <p className={`text-sm ${t.textMuted}`}>Drag to reorder • Spectators see this order</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={handleResetQueue}
+              disabled={isLoading}
+              className={`px-3 py-2 text-sm font-medium ${t.textMuted} border ${t.cardBorder} rounded-lg ${t.hoverBg} transition-colors disabled:opacity-50`}
+            >
+              Reset to Auto
+            </button>
+            <button
+              onClick={handleSaveQueue}
+              disabled={isLoading}
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
+            >
+              {isLoading ? 'Saving...' : 'Save Order'}
+            </button>
+          </div>
+        </div>
+        
+        {saveStatus && (
+          <div className={`mt-3 p-2 rounded-lg text-sm ${
+            saveStatus.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+          }`}>
+            {saveStatus.message}
+          </div>
+        )}
+      </div>
+      
+      {/* Queue List */}
+      <div className={`${t.card} rounded-xl border ${t.cardBorder} overflow-hidden`}>
+        <div className="divide-y divide-gray-200 dark:divide-gray-700">
+          {queueWithMatches.map((item, index) => {
+            const match = item.match;
+            const weightClass = getWeightClassFromTournament(match.tournamentName);
+            
+            return (
+              <div
+                key={`${item.tournamentId}-${item.matchId}`}
+                draggable
+                onDragStart={(e) => handleDragStart(e, index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDragEnd={handleDragEnd}
+                className={`p-4 cursor-move ${t.hoverBg} transition-colors ${
+                  draggedIndex === index ? 'opacity-50' : ''
+                }`}
+              >
+                <div className="flex items-center gap-4">
+                  {/* Position number */}
+                  <div className="flex-shrink-0">
+                    <div className={`w-10 h-10 rounded-full ${
+                      index === 0 ? 'bg-yellow-100 text-yellow-700' :
+                      index === 1 ? 'bg-gray-200 text-gray-700' :
+                      index === 2 ? 'bg-orange-100 text-orange-700' :
+                      `${t.tableBg} ${t.textMuted}`
+                    } flex items-center justify-center font-bold text-lg`}>
+                      {index + 1}
+                    </div>
+                  </div>
+                  
+                  {/* Match info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-xs px-2 py-0.5 rounded ${t.tableBg} ${t.textMuted}`}>
+                        {match.tournamentName}
+                      </span>
+                      <span className={`text-xs ${t.textFaint} font-mono`}>M{match.matchNum}</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <RobotAvatar name={match.competitorA} robotImages={robotImages} size="sm" colorClass="bg-blue-100 text-blue-600" />
+                      <span className={`font-semibold ${t.text} text-sm`}>
+                        <RobotLink name={match.competitorA} weightClass={weightClass} theme={theme} />
+                      </span>
+                      <span className={`text-xs ${t.textFaint}`}>vs</span>
+                      <RobotAvatar name={match.competitorB} robotImages={robotImages} size="sm" colorClass="bg-red-100 text-red-600" />
+                      <span className={`font-semibold ${t.text} text-sm`}>
+                        <RobotLink name={match.competitorB} weightClass={weightClass} theme={theme} />
+                      </span>
+                    </div>
+                  </div>
+                  
+                  {/* Drag handle */}
+                  <div className={`flex-shrink-0 ${t.textFaint}`}>
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 };
@@ -3338,6 +3772,14 @@ export default function TournamentJudgingApp() {
                   Judge
                 </button>
               )}
+              {!isSpectatorDomain && currentUser && (currentUser.role === 'judge' || currentUser.role === 'admin') && (
+                <button onClick={() => setView('queue')}
+                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                    view === 'queue' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  }`}>
+                  Queue
+                </button>
+              )}
               {!isSharedView && !isSpectatorDomain && (
                 <button onClick={() => handleLogin('admin')}
                   className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
@@ -3368,6 +3810,14 @@ export default function TournamentJudgingApp() {
                     view === 'judge' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
                   }`}>
                   Judge
+                </button>
+              )}
+              {!isSpectatorDomain && currentUser && (currentUser.role === 'judge' || currentUser.role === 'admin') && (
+                <button onClick={() => setView('queue')}
+                  className={`px-2 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    view === 'queue' ? `${t.activeBg} ${t.text}` : `${t.textMuted}`
+                  }`}>
+                  Queue
                 </button>
               )}
               {!isSharedView && !isSpectatorDomain && (
@@ -3476,6 +3926,7 @@ export default function TournamentJudgingApp() {
             robotImages={robotImages}
             activeMatches={activeMatches}
             repairResets={repairResets}
+            eventId={eventId}
             theme={theme} 
           />
         )}
@@ -3503,6 +3954,17 @@ export default function TournamentJudgingApp() {
             repairResets={repairResets}
             eventId={eventId}
             theme={theme} 
+          />
+        )}
+        
+        {!isLoading && view === 'queue' && (
+          <MatchQueueManager 
+            tournaments={tournaments}
+            eventId={eventId}
+            robotImages={robotImages}
+            activeMatches={activeMatches}
+            repairResets={repairResets}
+            theme={theme}
           />
         )}
         
