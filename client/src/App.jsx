@@ -3496,6 +3496,7 @@ export default function TournamentJudgingApp() {
   const hostname = window.location.hostname;
   const isSpectatorDomain = hostname.startsWith('brackets.') || hostname.startsWith('spectator.');
   const isSpectatorView = isSpectatorDomain || getUrlParam('spectator') === 'true' || getUrlParam('view') === 'spectator';
+  const isDemo = getUrlParam('demo') === 'true';
   
   const theme = darkMode ? 'dark' : 'light';
   const t = themes[theme];
