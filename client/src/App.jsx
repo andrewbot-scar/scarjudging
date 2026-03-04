@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import SCARDemo from './SCARDemo';
 
 // API Configuration
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
@@ -3495,6 +3496,8 @@ export default function TournamentJudgingApp() {
   const hostname = window.location.hostname;
   const isSpectatorDomain = hostname.startsWith('brackets.') || hostname.startsWith('spectator.');
   const isSpectatorView = isSpectatorDomain || getUrlParam('spectator') === 'true' || getUrlParam('view') === 'spectator';
+  const isDemo = getUrlParam('demo') === 'true';
+if (isDemo) return <SCARDemo />;
   
   const theme = darkMode ? 'dark' : 'light';
   const t = themes[theme];
