@@ -3496,8 +3496,6 @@ export default function TournamentJudgingApp() {
   const hostname = window.location.hostname;
   const isSpectatorDomain = hostname.startsWith('brackets.') || hostname.startsWith('spectator.');
   const isSpectatorView = isSpectatorDomain || getUrlParam('spectator') === 'true' || getUrlParam('view') === 'spectator';
-  const isDemo = getUrlParam('demo') === 'true';
-if (isDemo) return <SCARDemo />;
   
   const theme = darkMode ? 'dark' : 'light';
   const t = themes[theme];
@@ -3663,7 +3661,9 @@ if (isDemo) return <SCARDemo />;
     }
   };
 
-  const availableJudges = [
+ if (isDemo) return <SCARDemo />;
+
+const availableJudges = [
     { id: 'judge_1', name: 'Judge 1' },
     { id: 'judge_2', name: 'Judge 2' },
     { id: 'judge_3', name: 'Judge 3' },
