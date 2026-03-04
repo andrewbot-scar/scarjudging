@@ -4,7 +4,7 @@
 // Deploy at: brackets.socalattackrobots.com/demo
 // No backend required - all state is simulated in-memory
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useReducer } from "react";
 
 // ─── ELO config (mirrors production) ─────────────────────────────────────────
 const ELO_SITE_BASE_URL = "https://elo.socalattackrobots.com";
